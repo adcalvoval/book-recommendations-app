@@ -81,12 +81,22 @@ const parseCSVLine = (line: string): string[] => {
 };
 
 export const convertGoodreadsToBooks = (csvRows: GoodreadsCSVRow[]): Book[] => {
-  return csvRows
-    .filter(row => {
-      // Only include books that have been read (not just added to shelves)
-      const exclusiveShelf = row['Exclusive Shelf']?.toLowerCase();
-      return exclusiveShelf === 'read' && row['My Rating'] && parseInt(row['My Rating']) > 0;
-    })
+  const readBooks = csvRows.filter(row => {
+    // Only include books that have been read (not just added to shelves)
+    const exclusiveShelf = row['Exclusive Shelf']?.toLowerCase();
+    return exclusiveShelf === 'read' && row['My Rating'] && parseInt(row['My Rating']) > 0;
+  });
+
+  console.log('CSV Import Debug:');
+  console.log('Total rows:', csvRows.length);
+  console.log('Read books with ratings:', readBooks.length);
+  console.log('Sample rows:', csvRows.slice(0, 3).map(row => ({
+    title: row['Title'],
+    exclusiveShelf: row['Exclusive Shelf'],
+    rating: row['My Rating']
+  })));
+
+  return readBooks
     .map(row => {
       const genres = extractGenres(row['Bookshelves'], row['Bookshelves with positions'], row['Title'], row['Author']);
       const rating = parseInt(row['My Rating']) || 0;

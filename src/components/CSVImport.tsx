@@ -40,7 +40,23 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImport, onCancel }) => {
       const books = convertGoodreadsToBooks(csvRows);
       
       if (books.length === 0) {
-        setError('No valid books found in the CSV. Make sure you have rated books marked as "read".');
+        // Count books in different states for better error message
+        const totalBooks = csvRows.length;
+        const toReadBooks = csvRows.filter(row => row['Exclusive Shelf']?.toLowerCase() === 'to-read').length;
+        const readBooks = csvRows.filter(row => row['Exclusive Shelf']?.toLowerCase() === 'read').length;
+        const ratedBooks = csvRows.filter(row => parseInt(row['My Rating']) > 0).length;
+        
+        let errorMsg = `No books available to import from your CSV file.\n\nAnalysis of your file:\n• Total books: ${totalBooks}\n• Books marked "to-read": ${toReadBooks}\n• Books marked "read": ${readBooks}\n• Books with ratings: ${ratedBooks}\n\n`;
+        
+        if (toReadBooks > 0 && readBooks === 0) {
+          errorMsg += 'Your CSV only contains books from your "to-read" list. To import books, you need:\n1. Books marked as "read" (not "to-read")\n2. Books with ratings (1-5 stars)\n\nMake sure to export books you\'ve actually read and rated from Goodreads.';
+        } else if (readBooks > 0 && ratedBooks === 0) {
+          errorMsg += 'You have books marked as "read" but none have ratings. Please rate your books on Goodreads first, then export again.';
+        } else {
+          errorMsg += 'Make sure you have books that are both marked as "read" AND have ratings (1-5 stars) in Goodreads.';
+        }
+        
+        setError(errorMsg);
         setIsProcessing(false);
         return;
       }
