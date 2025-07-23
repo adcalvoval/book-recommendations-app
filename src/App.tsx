@@ -16,6 +16,24 @@ import type { SearchCriteria } from './components/SmartSearch';
 import { getSearchBasedRecommendations } from './utils/searchRecommendations';
 import AddBookModal from './components/AddBookModal';
 
+// Enhanced function to check if a book is already in user's library
+const isBookInUserLibrary = (book: Book | BookRecommendation, userBooks: Book[]): boolean => {
+  return userBooks.some(userBook => {
+    // Check by ID first (most reliable)
+    if (userBook.id === book.id) return true;
+    
+    // Check by title and author (case insensitive) as fallback
+    const titleMatch = userBook.title.toLowerCase().trim() === book.title.toLowerCase().trim();
+    const authorMatch = userBook.author.toLowerCase().trim() === book.author.toLowerCase().trim();
+    
+    // Also check for very similar titles (in case of slight variations)
+    const titleSimilar = userBook.title.toLowerCase().replace(/[^a-z0-9]/g, '') === 
+                        book.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    return (titleMatch && authorMatch) || (titleSimilar && authorMatch);
+  });
+};
+
 function App() {
   const [books, setBooks] = useState<Book[]>([]);
   const [recommendations, setRecommendations] = useState<BookRecommendation[]>([]);
@@ -131,13 +149,8 @@ function App() {
   };
 
   const handleAddToLibrary = (book: BookRecommendation) => {
-    // Check if book is already in library
-    const existingBook = books.find(b => 
-      b.title.toLowerCase() === book.title.toLowerCase() && 
-      b.author.toLowerCase() === book.author.toLowerCase()
-    );
-    
-    if (existingBook) {
+    // Check if book is already in library using enhanced matching
+    if (isBookInUserLibrary(book, books)) {
       alert('This book is already in your library!');
       return;
     }
@@ -148,6 +161,14 @@ function App() {
 
   const handleConfirmAddBook = (bookData: BookFormData) => {
     if (!bookToAdd) return;
+
+    // Final safety check to prevent duplicates
+    if (isBookInUserLibrary(bookToAdd, books)) {
+      alert('This book is already in your library!');
+      setShowAddModal(false);
+      setBookToAdd(null);
+      return;
+    }
 
     const newBook: Book = {
       id: Date.now().toString(),

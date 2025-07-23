@@ -2,6 +2,24 @@ import type { Book } from '../types';
 import { findSimilarBooks } from './bookEnhancer';
 import { expandedBookDatabase } from './expandedBookDatabase';
 
+// Enhanced function to check if a book is already in user's library
+const isBookInUserLibrary = (book: Book, userBooks: Book[]): boolean => {
+  return userBooks.some(userBook => {
+    // Check by ID first (most reliable)
+    if (userBook.id === book.id) return true;
+    
+    // Check by title and author (case insensitive) as fallback
+    const titleMatch = userBook.title.toLowerCase().trim() === book.title.toLowerCase().trim();
+    const authorMatch = userBook.author.toLowerCase().trim() === book.author.toLowerCase().trim();
+    
+    // Also check for very similar titles (in case of slight variations)
+    const titleSimilar = userBook.title.toLowerCase().replace(/[^a-z0-9]/g, '') === 
+                        book.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    return (titleMatch && authorMatch) || (titleSimilar && authorMatch);
+  });
+};
+
 export interface BookRecommendation extends Book {
   score: number;
   reasons: string[];
@@ -21,7 +39,7 @@ export const getRecommendations = (
   if (userBooks.length === 0) return [];
 
   const availableBooks = allBooks.filter(book => 
-    !userBooks.some(userBook => userBook.id === book.id) &&
+    !isBookInUserLibrary(book, userBooks) &&
     !options?.excludeIds?.includes(book.id)
   );
 
