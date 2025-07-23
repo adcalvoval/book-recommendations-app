@@ -117,11 +117,11 @@ const SmartSearch: React.FC<SmartSearchProps> = ({
 
     // Enhanced author search patterns
     const authorPatterns = [
-      /(?:books?\s+by|author:?|written\s+by)\s+([^,.\n]+)/i,
+      /(?:books?\s+by|author:?|written\s+by|from)\s+([^,.\n]+)/i,
       /^([a-z]+\s+[a-z]+)$/i, // Just "First Last" format
       /^([a-z]+\s+[a-z]+\s+[a-z]+)$/i, // "First Middle Last" format
-      /(?:want|read|looking\s+for).*?([a-z]+\s+[a-z]+)/i,
-      /([a-z]+\s+everett|percival\s+[a-z]+)/i // Specific patterns like "Percival Everett"
+      /(?:want|read|looking\s+for|recommend).*?(?:by\s+)?([a-z]+\s+[a-z]+)/i,
+      /([a-z]+\s+everett|percival\s+[a-z]+|stephen\s+king|toni\s+morrison|haruki\s+murakami)/i
     ];
 
     for (const pattern of authorPatterns) {
@@ -133,17 +133,20 @@ const SmartSearch: React.FC<SmartSearchProps> = ({
       }
     }
 
-    // Enhanced genre/style searches
+    // Enhanced genre/style searches with more comprehensive patterns
     const genrePatterns = [
-      /scandinavian|nordic|norwegian|swedish|danish|finnish/i,
-      /true\s+crime|crime|mystery|thriller/i,
-      /literary\s+fiction|literary/i,
-      /science\s+fiction|sci-?fi/i,
-      /fantasy|magical/i,
-      /romance|romantic/i,
-      /biography|memoir/i,
-      /horror|scary/i,
-      /comedy|funny|humorous/i
+      /scandinavian|nordic|norwegian|swedish|danish|finnish|icelandic/i,
+      /true\s+crime|crime\s+fiction|mystery|thriller|detective|noir/i,
+      /literary\s+fiction|literary|contemporary\s+fiction/i,
+      /science\s+fiction|sci-?fi|speculative\s+fiction/i,
+      /fantasy|magical\s+realism|urban\s+fantasy/i,
+      /romance|romantic\s+fiction|love\s+story/i,
+      /biography|memoir|autobiography/i,
+      /horror|scary|gothic|supernatural/i,
+      /comedy|funny|humorous|satirical/i,
+      /historical\s+fiction|period\s+drama/i,
+      /psychological\s+thriller|psychological\s+fiction/i,
+      /dystopian|post-apocalyptic|utopian/i
     ];
 
     for (const pattern of genrePatterns) {
@@ -157,11 +160,13 @@ const SmartSearch: React.FC<SmartSearchProps> = ({
       }
     }
 
-    // Enhanced mood searches
+    // Enhanced mood searches with more patterns
     const moodPatterns = [
-      /(?:mood|feeling|want\s+something)\s*:?\s*(\w+)/i,
-      /(mysterious|romantic|dark|uplifting|adventurous|calm|exciting|sad|happy)/i,
-      /feel\s+like\s+reading\s+something\s+(\w+)/i
+      /(?:mood|feeling|want\s+something|looking\s+for\s+something|in\s+the\s+mood\s+for)\s*:?\s*(\w+)/i,
+      /(mysterious|romantic|dark|uplifting|adventurous|calm|exciting|sad|happy|cozy|gritty|atmospheric|psychological|emotional|thought-provoking)/i,
+      /feel\s+like\s+reading\s+something\s+(\w+)/i,
+      /want\s+(?:to\s+read\s+)?(?:a\s+)?(\w+)\s+book/i,
+      /something\s+(\w+)\s+and\s+(\w+)/i // e.g., "something dark and mysterious"
     ];
 
     for (const pattern of moodPatterns) {
@@ -328,16 +333,22 @@ const SmartSearch: React.FC<SmartSearchProps> = ({
           Percival Everett
         </button>
         <button 
-          onClick={() => handleSuggestionClick('scandinavian crime')}
+          onClick={() => handleSuggestionClick('scandinavian crime novels')}
           className="example-query"
         >
-          scandinavian crime
+          scandinavian crime novels
         </button>
         <button 
-          onClick={() => handleSuggestionClick('books like The Trees')}
+          onClick={() => handleSuggestionClick('something dark and mysterious')}
           className="example-query"
         >
-          books like The Trees
+          something dark and mysterious
+        </button>
+        <button 
+          onClick={() => handleSuggestionClick('literary fiction like Toni Morrison')}
+          className="example-query"
+        >
+          literary fiction like Toni Morrison
         </button>
       </div>
     </div>

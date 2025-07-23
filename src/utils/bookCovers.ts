@@ -40,11 +40,11 @@ export const fetchBookCover = async (book: Book): Promise<string | null> => {
   }
 
   try {
-    // Try multiple sources for book covers
-    let coverUrl = await fetchFromOpenLibrary(book);
+    // Try Google Books first for more accurate covers
+    let coverUrl = await fetchFromGoogleBooksEnhanced(book);
     
     if (!coverUrl) {
-      coverUrl = await fetchFromGoogleBooks(book);
+      coverUrl = await fetchFromOpenLibrary(book);
     }
     
     if (!coverUrl) {
@@ -119,31 +119,126 @@ const fetchFromOpenLibrary = async (book: Book): Promise<string | null> => {
   }
 };
 
-const fetchFromGoogleBooks = async (book: Book): Promise<string | null> => {
+// Enhanced Google Books cover fetching with multiple strategies
+const fetchFromGoogleBooksEnhanced = async (book: Book): Promise<string | null> => {
   try {
-    const query = `intitle:"${book.title}" inauthor:"${book.author}"`;
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=1`;
+    // Try multiple search strategies for better matching
+    const searchStrategies = [
+      // Most specific search
+      `intitle:"${book.title}" inauthor:"${book.author}"`,
+      // Slightly looser search
+      `"${book.title}" "${book.author}"`,
+      // Title-focused search
+      `intitle:"${book.title}"`,
+      // Very loose search as fallback
+      `${book.title} ${book.author}`
+    ];
 
-    const response = await fetch(url, { mode: 'cors' });
-    if (!response.ok) return null;
+    for (const query of searchStrategies) {
+      const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=5&orderBy=relevance`;
+      
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) continue;
 
-    const data = await response.json();
-    if (data.items && data.items.length > 0) {
-      const book = data.items[0];
-      if (book.volumeInfo && book.volumeInfo.imageLinks) {
-        // Prefer higher resolution images
-        return book.volumeInfo.imageLinks.thumbnail || 
-               book.volumeInfo.imageLinks.smallThumbnail ||
-               null;
+      const data = await response.json();
+      if (data.items && data.items.length > 0) {
+        // Find the best match
+        for (const item of data.items) {
+          const volumeInfo = item.volumeInfo;
+          
+          // Verify this is a good match
+          if (isGoodBookMatch(book, volumeInfo)) {
+            if (volumeInfo.imageLinks) {
+              // Prefer highest resolution available
+              const coverUrl = volumeInfo.imageLinks.extraLarge ||
+                              volumeInfo.imageLinks.large ||
+                              volumeInfo.imageLinks.medium ||
+                              volumeInfo.imageLinks.thumbnail ||
+                              volumeInfo.imageLinks.smallThumbnail;
+              
+              if (coverUrl) {
+                // Convert to HTTPS if needed
+                return coverUrl.replace(/^http:/, 'https:');
+              }
+            }
+          }
+        }
       }
+      
+      // Small delay between requests to respect rate limits
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     return null;
   } catch (error) {
-    console.warn('Google Books cover fetch error:', error);
+    console.warn('Google Books enhanced cover fetch error:', error);
     return null;
   }
 };
+
+// Check if a Google Books result is a good match for our book
+const isGoodBookMatch = (book: Book, volumeInfo: any): boolean => {
+  const bookTitle = book.title.toLowerCase().trim();
+  const bookAuthor = book.author.toLowerCase().trim();
+  
+  const googleTitle = (volumeInfo.title || '').toLowerCase().trim();
+  const googleAuthors = (volumeInfo.authors || []).map((a: string) => a.toLowerCase().trim());
+  
+  // Check title similarity
+  const titleMatch = googleTitle.includes(bookTitle) || 
+                    bookTitle.includes(googleTitle) ||
+                    calculateStringSimilarity(bookTitle, googleTitle) > 0.7;
+  
+  // Check author match
+  const authorMatch = googleAuthors.some((googleAuthor: string) => 
+    googleAuthor.includes(bookAuthor) || 
+    bookAuthor.includes(googleAuthor) ||
+    calculateStringSimilarity(bookAuthor, googleAuthor) > 0.8
+  );
+  
+  return titleMatch && authorMatch;
+};
+
+// Simple string similarity calculation
+const calculateStringSimilarity = (str1: string, str2: string): number => {
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  const editDistance = levenshteinDistance(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
+};
+
+// Levenshtein distance calculation
+const levenshteinDistance = (str1: string, str2: string): number => {
+  const matrix = [];
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
+};
+
 
 const generatePlaceholderCover = (book: Book): string => {
   // Generate a placeholder cover using a service like via.placeholder.com or create a data URL
@@ -197,6 +292,62 @@ export const preloadBookCover = (coverUrl: string): void => {
     img.crossOrigin = 'anonymous';
     img.src = coverUrl;
   }
+};
+
+// Enhanced function to refresh covers for existing library books using Google Books
+export const refreshLibraryCoversWithGoogleBooks = async (books: Book[]): Promise<Map<string, string>> => {
+  const coverMap = new Map<string, string>();
+  const batchSize = 2; // Smaller batch size for more careful processing
+  
+  console.log(`Refreshing covers for ${books.length} books using Google Books API...`);
+  
+  for (let i = 0; i < books.length; i += batchSize) {
+    const batch = books.slice(i, i + batchSize);
+    
+    const promises = batch.map(async (book) => {
+      try {
+        // Force refresh from Google Books (bypass cache)
+        const coverUrl = await fetchFromGoogleBooksEnhanced(book);
+        
+        if (coverUrl && coverUrl !== book.coverUrl) {
+          console.log(`Found better cover for "${book.title}" by ${book.author}`);
+          coverMap.set(book.id, coverUrl);
+          
+          // Update cache with new cover
+          const cacheData = { url: coverUrl, timestamp: Date.now() };
+          coverCache.set(book.id, cacheData);
+          
+          try {
+            localStorage.setItem(`${COVER_CACHE_KEY_PREFIX}${book.id}`, JSON.stringify(cacheData));
+          } catch (error) {
+            console.warn('Error saving refreshed cover to localStorage:', error);
+          }
+        }
+      } catch (error) {
+        console.warn(`Error refreshing cover for "${book.title}":`, error);
+      }
+    });
+    
+    await Promise.all(promises);
+    
+    // Progress indicator
+    const progress = Math.min(i + batchSize, books.length);
+    console.log(`Processed ${progress}/${books.length} books...`);
+    
+    // Add delay between batches to respect API rate limits
+    if (i + batchSize < books.length) {
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+  }
+  
+  console.log(`Cover refresh complete. Updated ${coverMap.size} book covers.`);
+  return coverMap;
+};
+
+// Function to get high-quality covers for newly added books
+export const fetchHighQualityCover = async (book: Book): Promise<string | null> => {
+  // This is specifically for getting the best possible cover from Google Books
+  return await fetchFromGoogleBooksEnhanced(book);
 };
 
 // Clear old cache entries

@@ -7,10 +7,31 @@ import BookCover from './BookCover';
 interface RecommendationListProps {
   recommendations: BookRecommendation[];
   onAddToLibrary: (book: BookRecommendation) => void;
+  onRejectRecommendation: (book: BookRecommendation) => void;
+  onLikeRecommendation: (book: BookRecommendation) => void;
+  likedRecommendationIds: string[];
   userBooks: Book[];
+  isLoading?: boolean;
 }
 
-const RecommendationList: React.FC<RecommendationListProps> = ({ recommendations, onAddToLibrary, userBooks }) => {
+const RecommendationList: React.FC<RecommendationListProps> = ({ 
+  recommendations, 
+  onAddToLibrary, 
+  onRejectRecommendation,
+  onLikeRecommendation,
+  likedRecommendationIds,
+  userBooks, 
+  isLoading = false 
+}) => {
+  if (isLoading) {
+    return (
+      <div className="recommendations-loading">
+        <div className="loading-spinner"></div>
+        <p>Loading personalized recommendations from New York Times and Google Books...</p>
+      </div>
+    );
+  }
+
   if (recommendations.length === 0) {
     return (
       <div className="recommendations-empty">
@@ -96,18 +117,37 @@ const RecommendationList: React.FC<RecommendationListProps> = ({ recommendations
             </div>
             
             <div className="recommendation-actions">
+              <div className="like-action">
+                <button 
+                  onClick={() => onLikeRecommendation(book)}
+                  className={`btn btn-like ${likedRecommendationIds.includes(book.id) ? 'liked' : ''}`}
+                  title={likedRecommendationIds.includes(book.id) ? "You liked this recommendation" : "Like this recommendation to improve future suggestions"}
+                >
+                  {likedRecommendationIds.includes(book.id) ? '❤️ Liked' : '🤍 Like'}
+                </button>
+              </div>
+              
               {isBookInLibrary(book) ? (
                 <div className="already-in-library">
                   <span className="in-library-badge">✓ Already in Library</span>
                 </div>
               ) : (
-                <button 
-                  onClick={() => onAddToLibrary(book)}
-                  className="btn btn-add-to-library"
-                  title="Add this book to your reading library"
-                >
-                  📚 Add to Library
-                </button>
+                <div className="action-buttons">
+                  <button 
+                    onClick={() => onAddToLibrary(book)}
+                    className="btn btn-add-to-library"
+                    title="Add this book to your reading library"
+                  >
+                    📚 Add to Library
+                  </button>
+                  <button 
+                    onClick={() => onRejectRecommendation(book)}
+                    className="btn btn-reject"
+                    title="Not interested - get a different recommendation"
+                  >
+                    ❌ Not Interested
+                  </button>
+                </div>
               )}
             </div>
             </div>
