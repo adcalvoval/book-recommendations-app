@@ -60,26 +60,80 @@ export const getDynamicRecommendations = async (userBooks: Book[]): Promise<Book
     const getBookKey = (book: Book) => 
       `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
     
-    // Helper function to normalize author name
+    // Helper function to normalize author name (more aggressive normalization)
     const normalizeAuthor = (author: string) => 
-      author.toLowerCase().trim().replace(/[^\w\s]/g, '');
+      author.toLowerCase()
+            .trim()
+            .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, ' ')
+            .replace(/\bjr\b|\bsr\b|\biii?\b|\biv\b/g, '') // Remove Jr, Sr, II, III, IV
+            .trim();
+    
+    // Helper function to normalize title (more aggressive normalization)
+    const normalizeTitle = (title: string) =>
+      title.toLowerCase()
+           .trim()
+           .replace(/[^\w\s]/g, '')
+           .replace(/\s+/g, ' ')
+           .replace(/\b(the|a|an)\b/g, '') // Remove articles
+           .trim();
+    
+    // Enhanced book key with better normalization
+    const getEnhancedBookKey = (book: Book) => 
+      `${normalizeTitle(book.title)}-${normalizeAuthor(book.author)}`;
     
     // Helper function to check if we can add this book (not duplicate and not same author)
     const canAddBook = (book: Book): boolean => {
+      const bookId = book.id;
       const bookKey = getBookKey(book);
+      const enhancedBookKey = getEnhancedBookKey(book);
       const normalizedAuthor = normalizeAuthor(book.author);
       
-      return !seenBooks.has(book.id) && 
-             !seenTitleAuthor.has(bookKey) && 
-             !seenAuthors.has(normalizedAuthor) &&
-             !isBookInUserLibrary(book, userBooks);
+      // Check all possible duplications
+      const isDuplicateId = seenBooks.has(bookId);
+      const isDuplicateBookKey = seenTitleAuthor.has(bookKey);
+      const isDuplicateEnhanced = seenTitleAuthor.has(enhancedBookKey);
+      const isDuplicateAuthor = seenAuthors.has(normalizedAuthor);
+      const isInLibrary = isBookInUserLibrary(book, userBooks);
+      
+      // Debug logging
+      if (isDuplicateId || isDuplicateBookKey || isDuplicateEnhanced || isDuplicateAuthor) {
+        console.log(`🚫 Blocking duplicate: "${book.title}" by ${book.author}`, {
+          isDuplicateId,
+          isDuplicateBookKey,
+          isDuplicateEnhanced,
+          isDuplicateAuthor,
+          normalizedAuthor,
+          bookKey,
+          enhancedBookKey
+        });
+      }
+      
+      return !isDuplicateId && 
+             !isDuplicateBookKey && 
+             !isDuplicateEnhanced &&
+             !isDuplicateAuthor &&
+             !isInLibrary;
     };
     
     // Helper function to add book to tracking sets
     const addBookToTracking = (book: Book) => {
+      const bookKey = getBookKey(book);
+      const enhancedBookKey = getEnhancedBookKey(book);
+      const normalizedAuthor = normalizeAuthor(book.author);
+      
       seenBooks.add(book.id);
-      seenTitleAuthor.add(getBookKey(book));
-      seenAuthors.add(normalizeAuthor(book.author));
+      seenTitleAuthor.add(bookKey);
+      seenTitleAuthor.add(enhancedBookKey); // Track both keys
+      seenAuthors.add(normalizedAuthor);
+      
+      // Debug logging
+      console.log(`✅ Added to tracking: "${book.title}" by ${book.author}`, {
+        bookId: book.id,
+        normalizedAuthor,
+        bookKey,
+        enhancedBookKey
+      });
     };
     
     // Function to boost score based on liked books preferences
@@ -229,10 +283,35 @@ export const getDynamicRecommendations = async (userBooks: Book[]): Promise<Book
       }
     }
 
-    // Sort by score and return top recommendations
-    return recommendations
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 10);
+    // Final deduplication pass to ensure no duplicates slip through
+    const finalDeduplication = (recs: BookRecommendation[]): BookRecommendation[] => {
+      const seen = new Set<string>();
+      const seenAuthors = new Set<string>();
+      const deduplicated: BookRecommendation[] = [];
+      
+      for (const rec of recs) {
+        const bookKey = `${normalizeTitle(rec.title)}-${normalizeAuthor(rec.author)}`;
+        const authorKey = normalizeAuthor(rec.author);
+        
+        if (!seen.has(bookKey) && !seenAuthors.has(authorKey)) {
+          seen.add(bookKey);
+          seenAuthors.add(authorKey);
+          deduplicated.push(rec);
+        } else {
+          console.log(`🚫 Final dedup blocked: "${rec.title}" by ${rec.author}`);
+        }
+      }
+      
+      return deduplicated;
+    };
+    
+    // Sort by score and return deduplicated top recommendations
+    const sortedRecs = recommendations.sort((a, b) => b.score - a.score);
+    const deduplicatedRecs = finalDeduplication(sortedRecs);
+    
+    console.log(`📊 Recommendations summary: ${recommendations.length} total, ${deduplicatedRecs.length} after final dedup`);
+    
+    return deduplicatedRecs.slice(0, 10);
 
   } catch (error) {
     console.error('Error getting dynamic recommendations:', error);
@@ -255,26 +334,49 @@ export const getBestsellerRecommendations = async (userBooks: Book[] = []): Prom
     // Add rejected books to tracking
     rejectedBookIds.forEach(id => seenBooks.add(id));
     
-    // Helper functions (same as main function)
+    // Helper functions (enhanced, same as main function)
     const getBookKey = (book: Book) => 
       `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
     
     const normalizeAuthor = (author: string) => 
-      author.toLowerCase().trim().replace(/[^\w\s]/g, '');
+      author.toLowerCase()
+            .trim()
+            .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, ' ')
+            .replace(/\bjr\b|\bsr\b|\biii?\b|\biv\b/g, '')
+            .trim();
+    
+    const normalizeTitle = (title: string) =>
+      title.toLowerCase()
+           .trim()
+           .replace(/[^\w\s]/g, '')
+           .replace(/\s+/g, ' ')
+           .replace(/\b(the|a|an)\b/g, '')
+           .trim();
+    
+    const getEnhancedBookKey = (book: Book) => 
+      `${normalizeTitle(book.title)}-${normalizeAuthor(book.author)}`;
     
     const canAddBook = (book: Book): boolean => {
       const bookKey = getBookKey(book);
+      const enhancedBookKey = getEnhancedBookKey(book);
       const normalizedAuthor = normalizeAuthor(book.author);
       
       return !seenBooks.has(book.id) && 
              !seenTitleAuthor.has(bookKey) && 
+             !seenTitleAuthor.has(enhancedBookKey) &&
              !seenAuthors.has(normalizedAuthor);
     };
     
     const addBookToTracking = (book: Book) => {
+      const bookKey = getBookKey(book);
+      const enhancedBookKey = getEnhancedBookKey(book);
+      const normalizedAuthor = normalizeAuthor(book.author);
+      
       seenBooks.add(book.id);
-      seenTitleAuthor.add(getBookKey(book));
-      seenAuthors.add(normalizeAuthor(book.author));
+      seenTitleAuthor.add(bookKey);
+      seenTitleAuthor.add(enhancedBookKey);
+      seenAuthors.add(normalizedAuthor);
     };
     
     // Function to boost score based on user preferences
@@ -341,7 +443,30 @@ export const getBestsellerRecommendations = async (userBooks: Book[] = []): Prom
       }
     }
     
-    return recommendations.slice(0, 8);
+    // Final deduplication for bestsellers
+    const finalDeduplication = (recs: BookRecommendation[]): BookRecommendation[] => {
+      const seen = new Set<string>();
+      const seenAuthors = new Set<string>();
+      const deduplicated: BookRecommendation[] = [];
+      
+      for (const rec of recs) {
+        const bookKey = `${normalizeTitle(rec.title)}-${normalizeAuthor(rec.author)}`;
+        const authorKey = normalizeAuthor(rec.author);
+        
+        if (!seen.has(bookKey) && !seenAuthors.has(authorKey)) {
+          seen.add(bookKey);
+          seenAuthors.add(authorKey);
+          deduplicated.push(rec);
+        }
+      }
+      
+      return deduplicated;
+    };
+    
+    const deduplicatedRecs = finalDeduplication(recommendations);
+    console.log(`📊 Bestsellers summary: ${recommendations.length} total, ${deduplicatedRecs.length} after dedup`);
+    
+    return deduplicatedRecs.slice(0, 8);
   } catch (error) {
     console.error('Error getting bestseller recommendations:', error);
     return [];
