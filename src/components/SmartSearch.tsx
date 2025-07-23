@@ -115,52 +115,81 @@ const SmartSearch: React.FC<SmartSearchProps> = ({
       keywords: searchQuery.split(' ').filter(word => word.length > 2)
     };
 
-    // Parse mood searches
-    if (lowerQuery.includes('mood') || lowerQuery.includes('feeling') || lowerQuery.includes('want something')) {
-      criteria.type = 'mood';
-      const moodMatch = lowerQuery.match(/(?:mood|feeling|want something)\s*:?\s*(\w+)/);
-      if (moodMatch) {
-        criteria.mood = moodMatch[1];
-      } else {
-        // Extract mood from natural language
-        const moodWords = ['happy', 'sad', 'exciting', 'calm', 'mysterious', 'romantic', 'dark', 'uplifting', 'adventurous'];
-        for (const mood of moodWords) {
-          if (lowerQuery.includes(mood)) {
-            criteria.mood = mood;
-            break;
-          }
+    // Enhanced author search patterns
+    const authorPatterns = [
+      /(?:books?\s+by|author:?|written\s+by)\s+([^,.\n]+)/i,
+      /^([a-z]+\s+[a-z]+)$/i, // Just "First Last" format
+      /^([a-z]+\s+[a-z]+\s+[a-z]+)$/i, // "First Middle Last" format
+      /(?:want|read|looking\s+for).*?([a-z]+\s+[a-z]+)/i,
+      /([a-z]+\s+everett|percival\s+[a-z]+)/i // Specific patterns like "Percival Everett"
+    ];
+
+    for (const pattern of authorPatterns) {
+      const match = searchQuery.match(pattern);
+      if (match) {
+        criteria.type = 'author';
+        criteria.author = match[1].trim();
+        return criteria;
+      }
+    }
+
+    // Enhanced genre/style searches
+    const genrePatterns = [
+      /scandinavian|nordic|norwegian|swedish|danish|finnish/i,
+      /true\s+crime|crime|mystery|thriller/i,
+      /literary\s+fiction|literary/i,
+      /science\s+fiction|sci-?fi/i,
+      /fantasy|magical/i,
+      /romance|romantic/i,
+      /biography|memoir/i,
+      /horror|scary/i,
+      /comedy|funny|humorous/i
+    ];
+
+    for (const pattern of genrePatterns) {
+      if (pattern.test(lowerQuery)) {
+        criteria.type = 'genre';
+        const match = lowerQuery.match(pattern);
+        if (match) {
+          criteria.genre = match[0];
         }
+        return criteria;
       }
     }
 
-    // Parse similarity searches
-    if (lowerQuery.includes('similar to') || lowerQuery.includes('like')) {
-      criteria.type = 'similar';
-      const similarMatch = lowerQuery.match(/(?:similar to|like)\s*"?([^"]+)"?/);
-      if (similarMatch) {
-        criteria.similarTo = similarMatch[1].trim();
+    // Enhanced mood searches
+    const moodPatterns = [
+      /(?:mood|feeling|want\s+something)\s*:?\s*(\w+)/i,
+      /(mysterious|romantic|dark|uplifting|adventurous|calm|exciting|sad|happy)/i,
+      /feel\s+like\s+reading\s+something\s+(\w+)/i
+    ];
+
+    for (const pattern of moodPatterns) {
+      const match = lowerQuery.match(pattern);
+      if (match) {
+        criteria.type = 'mood';
+        criteria.mood = match[1];
+        return criteria;
       }
     }
 
-    // Parse genre searches
-    if (lowerQuery.includes('genre:') || lowerQuery.includes('genre ')) {
-      criteria.type = 'genre';
-      const genreMatch = lowerQuery.match(/genre\s*:?\s*(\w+)/);
-      if (genreMatch) {
-        criteria.genre = genreMatch[1];
+    // Enhanced similarity searches
+    const similarityPatterns = [
+      /(?:similar\s+to|like|reminds?\s+me\s+of)\s*"?([^",.]+)"?/i,
+      /(?:more|other)\s+books?\s+(?:similar\s+to|like)\s*"?([^",.]+)"?/i,
+      /(?:if\s+you\s+liked|fans?\s+of)\s*"?([^",.]+)"?/i
+    ];
+
+    for (const pattern of similarityPatterns) {
+      const match = lowerQuery.match(pattern);
+      if (match) {
+        criteria.type = 'similar';
+        criteria.similarTo = match[1].trim();
+        return criteria;
       }
     }
 
-    // Parse author searches
-    if (lowerQuery.includes('author:') || lowerQuery.includes('by ')) {
-      criteria.type = 'author';
-      const authorMatch = lowerQuery.match(/(?:author\s*:?\s*|by\s+)([^,]+)/);
-      if (authorMatch) {
-        criteria.author = authorMatch[1].trim();
-      }
-    }
-
-    // Check for direct genre/author mentions
+    // Check for specific book/author references in user's library
     const userGenres = new Set<string>();
     const userAuthors = new Set<string>();
     userBooks.forEach(book => {
@@ -168,21 +197,21 @@ const SmartSearch: React.FC<SmartSearchProps> = ({
       userAuthors.add(book.author.toLowerCase());
     });
 
-    // Check if query matches known genres
+    // Check if query matches known authors from user's library
+    for (const author of userAuthors) {
+      if (lowerQuery.includes(author.toLowerCase())) {
+        criteria.type = 'similar';
+        criteria.similarTo = author;
+        return criteria;
+      }
+    }
+
+    // Check if query matches known genres from user's library
     for (const genre of userGenres) {
       if (lowerQuery.includes(genre)) {
         criteria.type = 'genre';
         criteria.genre = genre;
-        break;
-      }
-    }
-
-    // Check if query matches known authors
-    for (const author of userAuthors) {
-      if (lowerQuery.includes(author)) {
-        criteria.type = 'author';
-        criteria.author = author;
-        break;
+        return criteria;
       }
     }
 
@@ -293,22 +322,22 @@ const SmartSearch: React.FC<SmartSearchProps> = ({
       <div className="search-examples">
         <span className="examples-label">Try:</span>
         <button 
-          onClick={() => handleSuggestionClick('books with mysterious mood')}
+          onClick={() => handleSuggestionClick('Percival Everett')}
           className="example-query"
         >
-          mysterious mood
+          Percival Everett
         </button>
         <button 
-          onClick={() => handleSuggestionClick('similar to fantasy')}
+          onClick={() => handleSuggestionClick('scandinavian crime')}
           className="example-query"
         >
-          similar to fantasy
+          scandinavian crime
         </button>
         <button 
-          onClick={() => handleSuggestionClick('feeling adventurous')}
+          onClick={() => handleSuggestionClick('books like The Trees')}
           className="example-query"
         >
-          feeling adventurous
+          books like The Trees
         </button>
       </div>
     </div>

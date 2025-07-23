@@ -227,17 +227,37 @@ const getAuthorRecommendations = (
   criteria: SearchCriteria,
   availableBooks: Book[]
 ): BookRecommendation[] => {
-  const author = criteria.author?.toLowerCase() || '';
+  const searchAuthor = criteria.author?.toLowerCase() || '';
+  
+  // Enhanced author search - handles partial names and common variations
+  const authorVariations = [
+    searchAuthor,
+    searchAuthor.replace(/\s+/g, ''), // Remove spaces
+    searchAuthor.split(' ').reverse().join(' '), // Last name first
+    searchAuthor.split(' ')[0], // First name only
+    searchAuthor.split(' ').slice(-1)[0] // Last name only
+  ];
   
   return availableBooks
-    .filter(book => 
-      book.author.toLowerCase().includes(author)
-    )
-    .map(book => ({
-      ...book,
-      score: Math.round(book.rating * 20),
-      reasons: [`By ${book.author}`]
-    }));
+    .filter(book => {
+      const bookAuthor = book.author.toLowerCase();
+      return authorVariations.some(variant => 
+        bookAuthor.includes(variant) || variant.includes(bookAuthor)
+      );
+    })
+    .map(book => {
+      // Score higher for exact matches
+      const exactMatch = book.author.toLowerCase() === searchAuthor;
+      const baseScore = book.rating * 18;
+      const matchBonus = exactMatch ? 25 : 15;
+      
+      return {
+        ...book,
+        score: Math.min(100, Math.round(baseScore + matchBonus)),
+        reasons: [`By ${book.author}`]
+      };
+    })
+    .sort((a, b) => b.score - a.score);
 };
 
 const getGeneralSearchRecommendations = (
@@ -247,14 +267,19 @@ const getGeneralSearchRecommendations = (
   const keywords = criteria.keywords || [];
   const query = criteria.query.toLowerCase();
 
+  // Enhanced search patterns for complex queries
+  const isScandinavianSearch = /scandinavian|nordic|norwegian|swedish|danish|finnish/.test(query);
+  const isCrimeSearch = /crime|mystery|thriller|detective/.test(query);
+  const isTrueCrimeSearch = /true\s*crime/.test(query);
+
   return availableBooks
     .map(book => {
       let score = 0;
       const reasons: string[] = [];
 
-      // Title match (30% weight)
+      // Title match (25% weight)
       if (book.title.toLowerCase().includes(query)) {
-        score += 30;
+        score += 25;
         reasons.push('Title match');
       }
 
@@ -264,24 +289,56 @@ const getGeneralSearchRecommendations = (
         reasons.push('Author match');
       }
 
-      // Genre match (20% weight)
-      const genreMatch = book.genre.some(genre => 
-        genre.toLowerCase().includes(query) ||
-        keywords.some(keyword => genre.toLowerCase().includes(keyword))
-      );
-      if (genreMatch) {
-        score += 20;
-        reasons.push('Genre match');
+      // Enhanced genre matching for complex searches (30% weight)
+      let genreScore = 0;
+      const bookGenresLower = book.genre.map(g => g.toLowerCase());
+      
+      // Scandinavian crime specific logic
+      if (isScandinavianSearch && isCrimeSearch) {
+        const hasScandinavianGenre = bookGenresLower.some(genre => 
+          genre.includes('scandinavian') || genre.includes('norwegian') || 
+          genre.includes('swedish') || genre.includes('danish')
+        );
+        const hasCrimeGenre = bookGenresLower.some(genre => 
+          genre.includes('crime') || genre.includes('mystery') || genre.includes('thriller')
+        );
+        
+        if (hasScandinavianGenre && hasCrimeGenre) {
+          genreScore = 30;
+          reasons.push('Scandinavian crime');
+        } else if (hasScandinavianGenre || hasCrimeGenre) {
+          genreScore = 20;
+          reasons.push(hasScandinavianGenre ? 'Scandinavian literature' : 'Crime genre');
+        }
+      } else if (isTrueCrimeSearch) {
+        const hasTrueCrime = bookGenresLower.some(genre => 
+          genre.includes('true crime') || genre.includes('non-fiction')
+        );
+        if (hasTrueCrime) {
+          genreScore = 30;
+          reasons.push('True crime');
+        }
+      } else {
+        // Standard genre matching
+        const genreMatch = book.genre.some(genre => 
+          genre.toLowerCase().includes(query) ||
+          keywords.some(keyword => genre.toLowerCase().includes(keyword))
+        );
+        if (genreMatch) {
+          genreScore = 25;
+          reasons.push('Genre match');
+        }
       }
+      score += genreScore;
 
-      // Tag match (15% weight)
+      // Tag match (10% weight)
       if (book.tags) {
         const tagMatch = book.tags.some(tag => 
           tag.name.toLowerCase().includes(query) ||
           keywords.some(keyword => tag.name.toLowerCase().includes(keyword))
         );
         if (tagMatch) {
-          score += 15;
+          score += 10;
           reasons.push('Theme match');
         }
       }
@@ -294,8 +351,8 @@ const getGeneralSearchRecommendations = (
         reasons.push('Content match');
       }
 
-      // Quality bonus
-      score += book.rating * 5;
+      // Quality bonus based on rating
+      score += book.rating * 4;
 
       return {
         ...book,
@@ -303,5 +360,6 @@ const getGeneralSearchRecommendations = (
         reasons: reasons.length > 0 ? [reasons[0]] : ['Based on your search']
       };
     })
-    .filter(book => book.score > 15);
+    .filter(book => book.score > 15)
+    .sort((a, b) => b.score - a.score);
 };
