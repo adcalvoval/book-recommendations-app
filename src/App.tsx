@@ -526,9 +526,9 @@ function App() {
                   onClick={handleRefreshRecommendations}
                   className="btn btn-primary"
                   disabled={books.length === 0}
-                  title={isSearchActive ? "Shuffle search results" : "Discover new recommendations"}
+                  title={isSearchActive ? "Shuffle search results" : "Refresh suggestions with new recommendations"}
                 >
-                  🔄 {isSearchActive ? 'Shuffle Results' : 'Discover More'}
+                  🔄 {isSearchActive ? 'Shuffle Results' : 'Refresh Suggestions'}
                 </button>
               </div>
             </div>
