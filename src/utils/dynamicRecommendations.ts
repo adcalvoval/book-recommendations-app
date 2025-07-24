@@ -59,32 +59,146 @@ const isBookInUserLibrary = (book: Book, userBooks: Book[]): boolean => {
   });
 };
 
-// Get recommendations based on user's reading preferences using ALL available sources
+// Get recommendations based on user's reading preferences using ALL available sources - UNRESTRICTED VERSION
 export const getDynamicRecommendations = async (userBooks: Book[], excludeShownIds: string[] = []): Promise<BookRecommendation[]> => {
-  console.log(`🚀 getDynamicRecommendations called with ${userBooks.length} user books, excluding ${excludeShownIds.length} shown IDs`);
-  console.log(`📚 User books:`, userBooks.map(b => `"${b.title}" by ${b.author}`));
-  console.log(`🚫 Excluding IDs:`, excludeShownIds);
+  console.log(`🚀 UNRESTRICTED getDynamicRecommendations called with ${userBooks.length} user books, excluding ${excludeShownIds.length} shown IDs`);
+  console.log(`🔓 REMOVING ALL RESTRICTIONS to test basic functionality`);
   
-  if (userBooks.length === 0) {
-    console.log(`⚠️ No user books found, falling back to getBestsellerRecommendations`);
-    // If no books in library, return mix from all curated sources
-    return getBestsellerRecommendations([]);
-  }
-
   try {
     const recommendations: BookRecommendation[] = [];
-    const seenBooks = new Set<string>(); // Track by ID
-    const seenTitleAuthor = new Set<string>(); // Track by title-author combination
-    const authorCount = new Map<string, number>(); // Track author frequency
     
-    // Get rejected books and shown books to exclude them
-    const rejectedBookIds = storage.getRejectedBooks();
-    rejectedBookIds.forEach(id => seenBooks.add(id));
-    excludeShownIds.forEach(id => seenBooks.add(id));
+    // NO RESTRICTIONS - Just get books from all sources and return them
+    console.log(`📚 Getting books from ALL sources without any filtering...`);
     
-    // Helper functions for deduplication
-    const getBookKey = (book: Book) => 
-      `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
+    // Get books from each source (no limits, no filtering)
+    const best21st = getHighlyRatedBest21stCentury(3.5, 10); // Lower threshold, more books
+    const goodreads = getHighlyRatedGoodreadsBestBooks(3.5, 10);
+    const newYorker = getNewYorkerAwardWinners(10);
+    const brookline = getBrooklineBooksmithStaffPicks(10);
+    
+    console.log(`📊 Source counts: 21st Century: ${best21st.length}, Goodreads: ${goodreads.length}, New Yorker: ${newYorker.length}, Brookline: ${brookline.length}`);
+    
+    // Add 2 from each source (no deduplication, no user library checks)
+    let index = 0;
+    
+    // From 21st Century
+    for (let i = 0; i < Math.min(2, best21st.length); i++) {
+      const book = best21st[i];
+      recommendations.push({
+        ...book,
+        score: 90 + index,
+        reasons: [`21st Century #${i + 1}`, 'No restrictions']
+      });
+      index++;
+    }
+    
+    // From Goodreads  
+    for (let i = 0; i < Math.min(2, goodreads.length); i++) {
+      const book = goodreads[i];
+      recommendations.push({
+        ...book,
+        score: 80 + index,
+        reasons: [`Goodreads #${i + 1}`, 'No restrictions']
+      });
+      index++;
+    }
+    
+    // From New Yorker
+    for (let i = 0; i < Math.min(1, newYorker.length); i++) {
+      const book = newYorker[i];
+      recommendations.push({
+        ...book,
+        score: 70 + index,
+        reasons: [`New Yorker #${i + 1}`, 'No restrictions']
+      });
+      index++;
+    }
+    
+    console.log(`🎯 UNRESTRICTED result: ${recommendations.length} books selected`);
+    recommendations.forEach((rec, i) => {
+      console.log(`   ${i + 1}. "${rec.title}" by ${rec.author} (score: ${rec.score})`);
+    });
+    
+    return recommendations;
+    
+  } catch (error) {
+    console.error('Error in unrestricted getDynamicRecommendations:', error);
+    return [];
+  }
+};
+
+// Get bestseller recommendations (fallback or for new users) - UNRESTRICTED VERSION  
+export const getBestsellerRecommendations = async (userBooks: Book[] = [], excludeShownIds: string[] = []): Promise<BookRecommendation[]> => {
+  console.log(`📈 UNRESTRICTED getBestsellerRecommendations called`);
+  console.log(`🔓 NO RESTRICTIONS - returning variety from all sources`);
+  
+  try {
+    const recommendations: BookRecommendation[] = [];
+    
+    // Get different books from all sources (no filtering)
+    const best21st = getHighlyRatedBest21stCentury(3.0, 15);
+    const goodreads = getHighlyRatedGoodreadsBestBooks(3.0, 15); 
+    const newYorker = getNewYorkerAwardWinners(15);
+    const brookline = getBrooklineBooksmithStaffPicks(15);
+    
+    console.log(`📊 Bestseller source counts: 21st: ${best21st.length}, Goodreads: ${goodreads.length}, NY: ${newYorker.length}, Brookline: ${brookline.length}`);
+    
+    // Take first book from each source 
+    if (best21st.length > 0) {
+      recommendations.push({
+        ...best21st[0],
+        score: 95,
+        reasons: ['21st Century Pick', 'Unrestricted']
+      });
+    }
+    
+    if (goodreads.length > 0) {
+      recommendations.push({
+        ...goodreads[0], 
+        score: 90,
+        reasons: ['Goodreads Pick', 'Unrestricted']
+      });
+    }
+    
+    if (newYorker.length > 0) {
+      recommendations.push({
+        ...newYorker[0],
+        score: 85, 
+        reasons: ['New Yorker Pick', 'Unrestricted']
+      });
+    }
+    
+    if (brookline.length > 0) {
+      recommendations.push({
+        ...brookline[0],
+        score: 80,
+        reasons: ['Brookline Pick', 'Unrestricted'] 
+      });
+    }
+    
+    // Add one more from Goodreads if available
+    if (goodreads.length > 1) {
+      recommendations.push({
+        ...goodreads[1],
+        score: 75,
+        reasons: ['Goodreads #2', 'Unrestricted']
+      });
+    }
+    
+    console.log(`📊 UNRESTRICTED bestsellers: ${recommendations.length} books`);
+    recommendations.forEach((rec, i) => {
+      console.log(`   ${i + 1}. "${rec.title}" by ${rec.author}`);
+    });
+    
+    return recommendations;
+    
+  } catch (error) {
+    console.error('Error in unrestricted getBestsellerRecommendations:', error);
+    return [];
+  }
+};
+
+// Enhanced similarity score calculation based on user's book preferences
     
     const normalizeAuthor = (author: string) => 
       author.toLowerCase()
