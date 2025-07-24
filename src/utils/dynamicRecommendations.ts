@@ -62,8 +62,11 @@ const isBookInUserLibrary = (book: Book, userBooks: Book[]): boolean => {
 // Get recommendations based on user's reading preferences using ALL available sources
 export const getDynamicRecommendations = async (userBooks: Book[], excludeShownIds: string[] = []): Promise<BookRecommendation[]> => {
   console.log(`🚀 getDynamicRecommendations called with ${userBooks.length} user books, excluding ${excludeShownIds.length} shown IDs`);
+  console.log(`📚 User books:`, userBooks.map(b => `"${b.title}" by ${b.author}`));
+  console.log(`🚫 Excluding IDs:`, excludeShownIds);
   
   if (userBooks.length === 0) {
+    console.log(`⚠️ No user books found, falling back to getBestsellerRecommendations`);
     // If no books in library, return mix from all curated sources
     return getBestsellerRecommendations([]);
   }
@@ -1162,51 +1165,138 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
   }
 };
 
-// Get bestseller recommendations (fallback or for new users)
+// Get bestseller recommendations (fallback or for new users) - SIMPLIFIED VERSION
 export const getBestsellerRecommendations = async (userBooks: Book[] = [], excludeShownIds: string[] = []): Promise<BookRecommendation[]> => {
+  console.log(`📈 getBestsellerRecommendations called for ${userBooks.length} user books, excluding ${excludeShownIds.length} IDs`);
+  
   try {
-    const bestsellers = await getMixedBestsellers();
+    // Use all curated sources equally for variety - this is the same logic as the main function
+    console.log(`🎯 Using ALL curated sources for variety (not just NYT bestsellers)`);
     
     const recommendations: BookRecommendation[] = [];
     const rejectedBookIds = storage.getRejectedBooks();
     const seenBooks = new Set<string>(); // Track by ID
     const seenTitleAuthor = new Set<string>(); // Track by title-author combination
-    const authorCount = new Map<string, number>(); // Track author frequency (allow up to 2 per author)
     
     // Add rejected books and shown books to tracking
     rejectedBookIds.forEach(id => seenBooks.add(id));
     excludeShownIds.forEach(id => seenBooks.add(id));
     
-    // Helper functions (enhanced, same as main function)
-    const getBookKey = (book: Book) => 
-      `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
+    console.log(`🚫 Excluding ${rejectedBookIds.length} rejected + ${excludeShownIds.length} shown = ${seenBooks.size} total books`);
     
-    const normalizeAuthor = (author: string) => 
-      author.toLowerCase()
-            .trim()
-            .replace(/[^\w\s]/g, '')
-            .replace(/\s+/g, ' ')
-            .replace(/\bjr\b|\bsr\b|\biii?\b|\biv\b/g, '')
-            .trim();
-    
-    const normalizeTitle = (title: string) =>
-      title.toLowerCase()
-           .trim()
-           .replace(/[^\w\s]/g, '')
-           .replace(/\s+/g, ' ')
-           .replace(/\b(the|a|an)\b/g, '')
-           .trim();
-    
-    const getEnhancedBookKey = (book: Book) => 
-      `${normalizeTitle(book.title)}-${normalizeAuthor(book.author)}`;
+    // Simple helper functions
+    const isBookInUserLibrary = (book: Book, userBooks: Book[]): boolean => {
+      return userBooks.some(userBook => {
+        const titleMatch = userBook.title.toLowerCase().trim() === book.title.toLowerCase().trim();
+        const authorMatch = userBook.author.toLowerCase().trim() === book.author.toLowerCase().trim();
+        return titleMatch && authorMatch;
+      });
+    };
     
     const canAddBook = (book: Book): boolean => {
-      const bookKey = getBookKey(book);
-      const enhancedBookKey = getEnhancedBookKey(book);
-      const normalizedAuthor = normalizeAuthor(book.author);
-      const authorExceededLimit = (authorCount.get(normalizedAuthor) || 0) >= 2;
-      
+      const bookKey = `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
       return !seenBooks.has(book.id) && 
+             !seenTitleAuthor.has(bookKey) && 
+             !isBookInUserLibrary(book, userBooks);
+    };
+    
+    const addBookToTracking = (book: Book) => {
+      const bookKey = `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
+      seenBooks.add(book.id);
+      seenTitleAuthor.add(bookKey);
+      console.log(`✅ Added to bestseller tracking: "${book.title}" by ${book.author}`);
+    };
+    
+    // Get books from all sources and shuffle them
+    const allBooks = [
+      ...getHighlyRatedBest21stCentury(4.0, 8),
+      ...getHighlyRatedGoodreadsBestBooks(4.0, 8), 
+      ...getNewYorkerAwardWinners(8),
+      ...getBrooklineBooksmithStaffPicks(8)
+    ];
+    
+    // Shuffle for variety
+    const shuffledBooks = allBooks.sort(() => Math.random() - 0.5);
+    console.log(`📚 Found ${shuffledBooks.length} total books from all curated sources`);
+    
+    // Add books until we have 5
+    for (const book of shuffledBooks) {
+      if (recommendations.length >= 5) break;
+      
+      console.log(`🔍 Checking bestseller book: "${book.title}" by ${book.author}`);
+      if (canAddBook(book)) {
+        addBookToTracking(book);
+        recommendations.push({
+          ...book,
+          score: 80 + Math.floor(Math.random() * 15),
+          reasons: ['Curated recommendation', 'High quality']
+        });
+        console.log(`✅ Added bestseller: "${book.title}" (${recommendations.length}/5)`);
+      } else {
+        console.log(`❌ Rejected bestseller: "${book.title}" (already seen or in library)`);
+      }
+    }
+    
+    console.log(`📊 getBestsellerRecommendations returning ${recommendations.length} books`);
+    return recommendations;
+    
+  } catch (error) {
+    console.error('Error in getBestsellerRecommendations:', error);
+    return [];
+  }
+};
+
+// Enhanced similarity score calculation based on user's book preferences
+const calculateSimilarityScore = (book: Book, referenceBook: Book): number => {
+  let score = 40; // Base score (slightly lower to make room for better matching)
+  
+  // Genre similarity (enhanced matching)
+  const commonGenres = book.genre.filter(genre => 
+    referenceBook.genre.some(refGenre => 
+      refGenre.toLowerCase().includes(genre.toLowerCase()) ||
+      genre.toLowerCase().includes(refGenre.toLowerCase())
+    )
+  );
+  
+  // More points for exact genre matches
+  const exactGenreMatches = book.genre.filter(genre => 
+    referenceBook.genre.some(refGenre => 
+      refGenre.toLowerCase() === genre.toLowerCase()
+    )
+  );
+  
+  score += exactGenreMatches.length * 20; // Exact matches get more points
+  score += (commonGenres.length - exactGenreMatches.length) * 12; // Partial matches get fewer points
+  
+  // Rating-based scoring (prefer books with similar or better ratings)
+  const ratingDiff = Math.abs(book.rating - referenceBook.rating);
+  if (ratingDiff <= 0.5) score += 15; // Very similar ratings
+  else if (ratingDiff <= 1.0) score += 10; // Somewhat similar ratings
+  else if (ratingDiff <= 1.5) score += 5; // Moderate difference
+  
+  // Boost for highly rated books
+  if (book.rating >= 4.5) score += 15;
+  else if (book.rating >= 4.0) score += 10;
+  else if (book.rating >= 3.5) score += 5;
+  
+  // Year similarity (prefer books from similar time periods)
+  if (book.year && referenceBook.year) {
+    const yearDiff = Math.abs(book.year - referenceBook.year);
+    if (yearDiff <= 5) score += 8; // Very recent
+    else if (yearDiff <= 15) score += 5; // Same era
+    else if (yearDiff <= 30) score += 2; // Similar generation
+  }
+  
+  // Author similarity (same author gets a boost, but we handle this separately)
+  if (book.author.toLowerCase() === referenceBook.author.toLowerCase()) {
+    score += 25; // Significant boost for same author
+  }
+  
+  // Random factor for variety (reduced to give more weight to actual similarity)
+  score += Math.floor(Math.random() * 5);
+  
+  return Math.min(100, score);
+};
              !seenTitleAuthor.has(bookKey) && 
              !seenTitleAuthor.has(enhancedBookKey) &&
              !authorExceededLimit;
