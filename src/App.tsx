@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import './App.css';
-import type { Book, BookFormData } from './types';
+import type { Book, BookFormData, WantToReadBook } from './types';
 import { storage } from './utils/storage';
 import { getRecommendations, sampleBooks, type BookRecommendation } from './utils/recommendations';
 import { getDynamicRecommendations, getReplacementRecommendation } from './utils/dynamicRecommendations';
@@ -15,6 +15,8 @@ import TagFilter from './components/TagFilter';
 import SmartSearch from './components/SmartSearch';
 import type { SearchCriteria } from './components/SmartSearch';
 import AddBookModal from './components/AddBookModal';
+import LikedBooksList from './components/LikedBooksList';
+import WantToReadList from './components/WantToReadList';
 
 // Enhanced function to check if a book is already in user's library
 const isBookInUserLibrary = (book: Book | BookRecommendation, userBooks: Book[]): boolean => {
@@ -47,7 +49,7 @@ function App() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showTagFilter, setShowTagFilter] = useState(false);
   const [, setRefreshSeed] = useState(Date.now());
-  const [activeTab, setActiveTab] = useState<'books' | 'recommendations'>('books');
+  const [activeTab, setActiveTab] = useState<'books' | 'recommendations' | 'liked' | 'wantToRead'>('books');
   const [searchCriteria, setSearchCriteria] = useState<SearchCriteria | null>(null);
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [shownRecommendationIds, setShownRecommendationIds] = useState<string[]>([]);
@@ -55,46 +57,61 @@ function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [bookToAdd, setBookToAdd] = useState<BookRecommendation | null>(null);
   const [likedRecommendationIds, setLikedRecommendationIds] = useState<string[]>([]);
+  const [likedBooks, setLikedBooks] = useState<BookRecommendation[]>([]);
+  const [wantToReadBooks, setWantToReadBooks] = useState<WantToReadBook[]>([]);
 
   useEffect(() => {
     const loadedBooks = storage.getBooks();
     const likedIds = storage.getLikedRecommendations();
+    const likedBooksData = storage.getLikedBooksData();
+    const wantToReadBooksData = storage.getWantToReadBooks();
+    
+    // Debug what's being loaded
+    console.log('🚀 App startup - loading data:', {
+      books: loadedBooks.length,
+      likedBooks: likedBooksData.length,
+      wantToReadBooks: wantToReadBooksData.length,
+      wantToReadSample: wantToReadBooksData.slice(0, 3).map(b => ({ title: b.title, author: b.author }))
+    });
+    
     setBooks(loadedBooks);
     setLikedRecommendationIds(likedIds);
+    setLikedBooks(likedBooksData);
+    setWantToReadBooks(wantToReadBooksData);
     if (!isSearchActive) {
-      loadDynamicRecommendations(loadedBooks);
+      loadDynamicRecommendations(loadedBooks, []);
     }
   }, [isSearchActive]);
 
-  const loadDynamicRecommendations = async (userBooks: Book[]) => {
+  const loadDynamicRecommendations = async (userBooks: Book[], excludeShownIds: string[] = []) => {
     setIsLoadingRecommendations(true);
     try {
-      const dynamicRecs = await getDynamicRecommendations(userBooks);
-      setRecommendations(dynamicRecs);
+      const dynamicRecs = await getDynamicRecommendations(userBooks, excludeShownIds);
+      setRecommendations(dynamicRecs.slice(0, 5)); // Ensure exactly 5 recommendations
     } catch (error) {
       console.error('Error loading dynamic recommendations:', error);
       // Fallback to static recommendations
-      const staticRecs = getRecommendations(userBooks, sampleBooks);
-      setRecommendations(staticRecs);
+      const staticRecs = getRecommendations(userBooks, sampleBooks, { excludeIds: excludeShownIds });
+      setRecommendations(staticRecs.slice(0, 5)); // Ensure exactly 5 recommendations
     } finally {
       setIsLoadingRecommendations(false);
     }
   };
 
-  const updateRecommendations = async (userBooks: Book[], options?: { shuffle?: boolean; seed?: number; refresh?: boolean }) => {
+  const updateRecommendations = async (userBooks: Book[], options?: { shuffle?: boolean; seed?: number; refresh?: boolean; excludeShownIds?: string[] }) => {
     if (isSearchActive && searchCriteria) {
       // Use search-based recommendations with APIs
       setIsLoadingRecommendations(true);
       try {
         const { getSearchBasedRecommendations } = await import('./utils/dynamicRecommendations');
         const searchRecs = await getSearchBasedRecommendations(searchCriteria.query, userBooks);
-        setRecommendations(searchRecs);
+        setRecommendations(searchRecs.slice(0, 5)); // Ensure exactly 5 recommendations
       } catch (error) {
         console.error('Error loading search recommendations:', error);
         // Fallback to static search
         const { getSearchBasedRecommendations: staticSearch } = await import('./utils/searchRecommendations');
         const searchRecs = staticSearch(searchCriteria, userBooks, sampleBooks);
-        setRecommendations(searchRecs);
+        setRecommendations(searchRecs.slice(0, 5)); // Ensure exactly 5 recommendations
       } finally {
         setIsLoadingRecommendations(false);
       }
@@ -103,11 +120,11 @@ function App() {
 
     // Use dynamic recommendations from APIs
     if (options?.refresh || !options) {
-      await loadDynamicRecommendations(userBooks);
+      await loadDynamicRecommendations(userBooks, options?.excludeShownIds || []);
     } else {
       // Fallback to static recommendations for specific options
-      const recs = getRecommendations(userBooks, sampleBooks, options);
-      setRecommendations(recs);
+      const recs = getRecommendations(userBooks, sampleBooks, { ...options, excludeIds: options?.excludeShownIds });
+      setRecommendations(recs.slice(0, 5)); // Ensure exactly 5 recommendations
     }
   };
 
@@ -193,9 +210,10 @@ function App() {
       // Add book to rejected list
       storage.addRejectedBook(rejectedBook.id);
       
-      // Get replacement recommendation
+      // Get replacement recommendation, passing current recommendations to avoid duplicates
       const rejectedIds = storage.getRejectedBooks();
-      const replacement = await getReplacementRecommendation(rejectedBook, books, rejectedIds);
+      const currentRecommendations = recommendations.filter(rec => rec.id !== rejectedBook.id);
+      const replacement = await getReplacementRecommendation(rejectedBook, books, rejectedIds, currentRecommendations);
       
       if (replacement) {
         // Replace rejected book with new recommendation
@@ -224,12 +242,14 @@ function App() {
     
     if (isCurrentlyLiked) {
       // Unlike the book
-      storage.removeLikedRecommendation(likedBook.id);
+      storage.removeLikedBookData(likedBook.id);
       setLikedRecommendationIds(prev => prev.filter(id => id !== likedBook.id));
+      setLikedBooks(prev => prev.filter(book => book.id !== likedBook.id));
     } else {
-      // Like the book
-      storage.addLikedRecommendation(likedBook.id);
+      // Like the book - store full book data
+      storage.addLikedBookData(likedBook);
       setLikedRecommendationIds(prev => [...prev, likedBook.id]);
+      setLikedBooks(prev => [...prev, { ...likedBook, likedAt: new Date().toISOString() }]);
     }
   };
 
@@ -273,18 +293,113 @@ function App() {
     setBookToAdd(null);
   };
 
-  const handleImportBooks = async (importedBooks: Book[]) => {
+  const handleRemoveFromLiked = (bookId: string) => {
+    storage.removeLikedBookData(bookId);
+    setLikedRecommendationIds(prev => prev.filter(id => id !== bookId));
+    setLikedBooks(prev => prev.filter(book => book.id !== bookId));
+  };
+
+  const handleAddLikedToLibrary = (book: BookRecommendation) => {
+    // Check if book is already in library using enhanced matching
+    if (isBookInUserLibrary(book, books)) {
+      alert('This book is already in your library!');
+      return;
+    }
+
+    setBookToAdd(book);
+    setShowAddModal(true);
+  };
+
+  // Want to Read handlers
+  const handleRemoveFromWantToRead = (id: string) => {
+    storage.removeWantToReadBook(id);
+    setWantToReadBooks(prev => prev.filter(book => book.id !== id));
+  };
+
+  const handleMarkAsRead = (wantToReadBook: WantToReadBook) => {
+    const rating = prompt('What would you rate this book? (1-5 stars)', '4');
+    if (rating && !isNaN(Number(rating))) {
+      const ratingNum = Math.max(1, Math.min(5, Number(rating)));
+      
+      // Create a read book from the want-to-read book
+      const readBook: Book = {
+        id: `read-${Date.now()}`, // New ID for the read version
+        title: wantToReadBook.title,
+        author: wantToReadBook.author,
+        genre: wantToReadBook.genre,
+        rating: ratingNum,
+        description: wantToReadBook.description,
+        summary: wantToReadBook.summary,
+        year: wantToReadBook.year,
+        isbn: wantToReadBook.isbn,
+        tags: wantToReadBook.tags,
+        coverUrl: wantToReadBook.coverUrl
+      };
+      
+      // Move from want-to-read to library
+      storage.moveWantToReadToLibrary(wantToReadBook.id, readBook);
+      
+      // Update state
+      setWantToReadBooks(prev => prev.filter(book => book.id !== wantToReadBook.id));
+      setBooks(prev => [...prev, readBook]);
+      
+      // Update recommendations
+      updateRecommendations([...books, readBook]);
+      
+      // Switch to books tab to show the newly added book
+      setActiveTab('books');
+    }
+  };
+
+  const handleUpdateWantToReadPriority = (id: string, priority: 'low' | 'medium' | 'high') => {
+    const updatedBooks = wantToReadBooks.map(book => 
+      book.id === id ? { ...book, priority } : book
+    );
+    setWantToReadBooks(updatedBooks);
+    
+    // Update in storage
+    const bookToUpdate = wantToReadBooks.find(book => book.id === id);
+    if (bookToUpdate) {
+      storage.updateWantToReadBook({ ...bookToUpdate, priority });
+    }
+  };
+
+  const handleUpdateWantToReadNotes = (id: string, notes: string) => {
+    const updatedBooks = wantToReadBooks.map(book => 
+      book.id === id ? { ...book, notes } : book
+    );
+    setWantToReadBooks(updatedBooks);
+    
+    // Update in storage
+    const bookToUpdate = wantToReadBooks.find(book => book.id === id);
+    if (bookToUpdate) {
+      storage.updateWantToReadBook({ ...bookToUpdate, notes });
+    }
+  };
+
+  const handleImportBooks = async (importedBooks: Book[], importedWantToReadBooks: WantToReadBook[]) => {
     // Filter out books that are already in the library (by title and author)
     const existingBooks = new Set(books.map(book => `${book.title.toLowerCase()}-${book.author.toLowerCase()}`));
     const newBooks = importedBooks.filter(book => 
       !existingBooks.has(`${book.title.toLowerCase()}-${book.author.toLowerCase()}`)
     );
     
+    // Filter out want-to-read books that are already in the want-to-read list
+    const existingWantToReadBooks = new Set(wantToReadBooks.map(book => `${book.title.toLowerCase()}-${book.author.toLowerCase()}`));
+    const newWantToReadBooks = importedWantToReadBooks.filter(book => 
+      !existingWantToReadBooks.has(`${book.title.toLowerCase()}-${book.author.toLowerCase()}`) &&
+      !existingBooks.has(`${book.title.toLowerCase()}-${book.author.toLowerCase()}`) // Also exclude if already read
+    );
+    
     const updatedBooks = [...books, ...newBooks];
+    const updatedWantToReadBooks = [...wantToReadBooks, ...newWantToReadBooks];
+    
     setBooks(updatedBooks);
+    setWantToReadBooks(updatedWantToReadBooks);
     
     // Save all new books to storage
     newBooks.forEach(book => storage.addBook(book));
+    newWantToReadBooks.forEach(book => storage.addWantToReadBook(book));
     
     await updateRecommendations(updatedBooks);
     setShowImport(false);
@@ -294,6 +409,19 @@ function App() {
       fetchSummariesForBooks(newBooks);
       generateTagsForImportedBooks(newBooks);
       fetchCoversForImportedBooks(newBooks);
+    }
+    
+    // Show success message with debugging info
+    console.log('📊 Import Summary:', {
+      importedReadBooks: newBooks.length,
+      importedWantToReadBooks: newWantToReadBooks.length,
+      totalWantToReadAfterImport: updatedWantToReadBooks.length,
+      wantToReadBooksInState: wantToReadBooks.length
+    });
+    
+    if (newBooks.length > 0 || newWantToReadBooks.length > 0) {
+      const message = `Successfully imported ${newBooks.length} read books and ${newWantToReadBooks.length} want-to-read books!`;
+      alert(message);
     }
   };
 
@@ -389,13 +517,17 @@ function App() {
     setRefreshSeed(newSeed);
     setRefreshCount(prev => prev + 1);
     
+    // Add current recommendations to shown list to avoid duplicates
+    const currentRecIds = recommendations.map(rec => rec.id);
+    setShownRecommendationIds(prev => [...new Set([...prev, ...currentRecIds])]);
+    
     if (isSearchActive && searchCriteria) {
       // For search results, refresh with new API results
       setIsLoadingRecommendations(true);
       try {
         const { getSearchBasedRecommendations } = await import('./utils/dynamicRecommendations');
         const searchRecs = await getSearchBasedRecommendations(searchCriteria.query, books);
-        setRecommendations(searchRecs);
+        setRecommendations(searchRecs.slice(0, 5)); // Ensure exactly 5 recommendations
       } catch (error) {
         console.error('Error refreshing search recommendations:', error);
       } finally {
@@ -403,7 +535,8 @@ function App() {
       }
     } else {
       await updateRecommendations(books, { 
-        refresh: true 
+        refresh: true,
+        excludeShownIds: [...shownRecommendationIds, ...currentRecIds]
       });
     }
   };
@@ -528,6 +661,18 @@ function App() {
           onClick={() => setActiveTab('recommendations')}
         >
           Recommendations ({recommendations.length})
+        </button>
+        <button 
+          className={activeTab === 'liked' ? 'nav-btn active' : 'nav-btn'}
+          onClick={() => setActiveTab('liked')}
+        >
+          Liked Books ({likedBooks.length})
+        </button>
+        <button 
+          className={activeTab === 'wantToRead' ? 'nav-btn active' : 'nav-btn'}
+          onClick={() => setActiveTab('wantToRead')}
+        >
+          Want to Read ({wantToReadBooks.length})
         </button>
       </nav>
 
@@ -679,6 +824,70 @@ function App() {
               likedRecommendationIds={likedRecommendationIds}
               userBooks={books}
               isLoading={isLoadingRecommendations}
+            />
+          </div>
+        )}
+
+        {activeTab === 'liked' && (
+          <div className="liked-books-section">
+            <div className="section-header">
+              <h2>Your Liked Books</h2>
+              <div className="section-actions">
+                {likedBooks.length > 0 && (
+                  <button 
+                    onClick={() => {
+                      if (confirm('Are you sure you want to clear all liked books?')) {
+                        storage.clearLikedRecommendations();
+                        setLikedBooks([]);
+                        setLikedRecommendationIds([]);
+                      }
+                    }}
+                    className="btn btn-secondary"
+                    title="Clear all liked books"
+                  >
+                    🗑️ Clear All Liked
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <LikedBooksList 
+              likedBooks={likedBooks}
+              onAddToLibrary={handleAddLikedToLibrary}
+              onRemoveFromLiked={handleRemoveFromLiked}
+              userBooks={books}
+            />
+          </div>
+        )}
+
+        {activeTab === 'wantToRead' && (
+          <div className="want-to-read-section">
+            <div className="section-header">
+              <h2>Your Want to Read List</h2>
+              <div className="section-actions">
+                {wantToReadBooks.length > 0 && (
+                  <button 
+                    onClick={() => {
+                      if (confirm('Are you sure you want to clear your entire want-to-read list?')) {
+                        wantToReadBooks.forEach(book => storage.removeWantToReadBook(book.id));
+                        setWantToReadBooks([]);
+                      }
+                    }}
+                    className="btn btn-secondary"
+                    title="Clear all want-to-read books"
+                  >
+                    🗑️ Clear All
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <WantToReadList 
+              wantToReadBooks={wantToReadBooks}
+              onRemoveFromWantToRead={handleRemoveFromWantToRead}
+              onMarkAsRead={handleMarkAsRead}
+              onUpdatePriority={handleUpdateWantToReadPriority}
+              onUpdateNotes={handleUpdateWantToReadNotes}
             />
           </div>
         )}

@@ -13,6 +13,31 @@ import {
   getMixedBestsellers,
   convertNYTBookToBook 
 } from './nytBooksApi';
+import { 
+  getBest21stCenturyBooksByGenre,
+  getHighlyRatedBest21stCentury,
+  getAwardWinningBest21stCentury 
+} from './bestBooks21stCentury';
+import { 
+  getGoodreadsBestBooksByGenre,
+  getHighlyRatedGoodreadsBestBooks,
+  getGoodreadsClassicBooks,
+  getRandomGoodreadsBestBooks 
+} from './goodreadsBestBooks';
+import { 
+  getNewYorkerBooksByGenre,
+  getNewYorkerAwardWinners,
+  getRecentNewYorkerBooks,
+  getNewYorkerLiteraryFiction,
+  getNewYorkerNonfiction 
+} from './newYorkerBestBooks';
+import { 
+  getBrooklineBooksmithByGenre,
+  getHighRatedBrooklineBooksmith,
+  getRecentBrooklineBooksmith,
+  getBrooklineBooksmithDiverseVoices,
+  getBrooklineBooksmithStaffPicks 
+} from './brooklineBooksmithRecommendations';
 import { storage } from './storage';
 
 
@@ -34,10 +59,12 @@ const isBookInUserLibrary = (book: Book, userBooks: Book[]): boolean => {
   });
 };
 
-// Get recommendations based on user's reading preferences
-export const getDynamicRecommendations = async (userBooks: Book[]): Promise<BookRecommendation[]> => {
+// Get recommendations based on user's reading preferences using ALL available sources
+export const getDynamicRecommendations = async (userBooks: Book[], excludeShownIds: string[] = []): Promise<BookRecommendation[]> => {
+  console.log(`🚀 getDynamicRecommendations called with ${userBooks.length} user books, excluding ${excludeShownIds.length} shown IDs`);
+  
   if (userBooks.length === 0) {
-    // If no books in library, return popular bestsellers
+    // If no books in library, return mix from all curated sources
     return getBestsellerRecommendations([]);
   }
 
@@ -45,16 +72,270 @@ export const getDynamicRecommendations = async (userBooks: Book[]): Promise<Book
     const recommendations: BookRecommendation[] = [];
     const seenBooks = new Set<string>(); // Track by ID
     const seenTitleAuthor = new Set<string>(); // Track by title-author combination
-    const seenAuthors = new Set<string>(); // Track authors to prevent duplicates
+    const authorCount = new Map<string, number>(); // Track author frequency
     
-    // Get rejected books to exclude them
+    // Get rejected books and shown books to exclude them
     const rejectedBookIds = storage.getRejectedBooks();
     rejectedBookIds.forEach(id => seenBooks.add(id));
+    excludeShownIds.forEach(id => seenBooks.add(id));
+    
+    // Helper functions for deduplication
+    const getBookKey = (book: Book) => 
+      `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
+    
+    const normalizeAuthor = (author: string) => 
+      author.toLowerCase()
+            .trim()
+            .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, ' ')
+            .replace(/\bjr\b|\bsr\b|\biii?\b|\biv\b/g, '')
+            .trim();
+    
+    const normalizeTitle = (title: string) =>
+      title.toLowerCase()
+           .trim()
+           .replace(/[^\w\s]/g, '')
+           .replace(/\s+/g, ' ')
+           .replace(/\b(the|a|an)\b/g, '')
+           .trim();
+    
+    const getEnhancedBookKey = (book: Book) => 
+      `${normalizeTitle(book.title)}-${normalizeAuthor(book.author)}`;
+    
+    const canAddBook = (book: Book): boolean => {
+      const bookKey = getBookKey(book);
+      const enhancedBookKey = getEnhancedBookKey(book);
+      const normalizedAuthor = normalizeAuthor(book.author);
+      
+      const inSeenBooks = seenBooks.has(book.id);
+      const inSeenTitleAuthor = seenTitleAuthor.has(bookKey);
+      const inSeenEnhanced = seenTitleAuthor.has(enhancedBookKey);
+      const authorExceeded = (authorCount.get(normalizedAuthor) || 0) >= 2;
+      const inUserLibrary = isBookInUserLibrary(book, userBooks);
+      
+      const canAdd = !inSeenBooks && !inSeenTitleAuthor && !inSeenEnhanced && !authorExceeded && !inUserLibrary;
+      
+      if (!canAdd) {
+        console.log(`🚫 Cannot add "${book.title}": seenBooks=${inSeenBooks}, seenTitle=${inSeenTitleAuthor}, seenEnhanced=${inSeenEnhanced}, authorExceeded=${authorExceeded} (${authorCount.get(normalizedAuthor) || 0}), inLibrary=${inUserLibrary}`);
+      }
+      
+      return canAdd;
+    };
+    
+    const addBookToTracking = (book: Book) => {
+      const bookKey = getBookKey(book);
+      const enhancedBookKey = getEnhancedBookKey(book);
+      const normalizedAuthor = normalizeAuthor(book.author);
+      
+      seenBooks.add(book.id);
+      seenTitleAuthor.add(bookKey);
+      seenTitleAuthor.add(enhancedBookKey);
+      
+      const currentCount = authorCount.get(normalizedAuthor) || 0;
+      authorCount.set(normalizedAuthor, currentCount + 1);
+    };
+
+    // STRATEGY 1: Use Google Books API for similarity-based recommendations (if user has books)
+    if (userBooks.length > 0) {
+      const booksForRecommendations = userBooks
+        .filter(book => !book.rating || book.rating >= 3)
+        .sort((a, b) => (b.rating || 3.5) - (a.rating || 3.5))
+        .slice(0, 3);
+      
+      console.log(`📚 Strategy 1: Using ${booksForRecommendations.length} user books for Google Books API recommendations`);
+      
+      for (const book of booksForRecommendations) {
+        if (recommendations.length >= 2) break;
+        
+        try {
+          const similarBooks = await searchSimilarBooks(book.genre, book.author);
+          console.log(`🔍 Found ${similarBooks.length} similar books for "${book.title}" (genres: ${book.genre.join(', ')})`);
+          
+          let addedSimilar = 0;
+          for (const googleBook of similarBooks.slice(0, 4)) {
+            const convertedBook = convertGoogleBookToBook(googleBook);
+            console.log(`🔍 Checking similar book: "${convertedBook.title}" by ${convertedBook.author}`);
+            
+            if (canAddBook(convertedBook)) {
+              addBookToTracking(convertedBook);
+              const baseScore = calculateSimilarityScore(convertedBook, book);
+              recommendations.push({
+                ...convertedBook,
+                score: baseScore + 25,
+                reasons: [`Similar to "${book.title}"`, 'Based on your library'],
+                similarTo: book.title
+              });
+              addedSimilar++;
+              console.log(`✅ Added similar book: "${convertedBook.title}" for user book "${book.title}"`);
+              break; // One per user book for variety
+            } else {
+              console.log(`❌ Rejected similar book: "${convertedBook.title}" (already added or in library)`);
+            }
+          }
+          
+          if (addedSimilar === 0) {
+            console.log(`⚠️ No similar books could be added for "${book.title}"`);
+          }
+        } catch (error) {
+          console.log(`❌ Could not find similar books for "${book.title}":`, error);
+        }
+      }
+      
+      console.log(`📊 Strategy 1 Complete: ${recommendations.length} Google Books API recommendations`);
+    }
+
+    // STRATEGY 2: Add from ALL curated sources equally
+    const targetFromEachSource = Math.max(1, Math.floor((5 - recommendations.length) / 4));
+    console.log(`🎯 Strategy 2 Setup: Need ${5 - recommendations.length} more books, targeting ${targetFromEachSource} from each of 4 sources`);
+    console.log(`👤 User library analysis: ${userBooks.length} books in library:`, userBooks.map(b => `"${b.title}" by ${b.author} (${b.rating || 'unrated'})`));
+    
+    // A. Best 21st Century Books
+    console.log(`📚 Strategy 2A: Adding Best 21st Century Books (${targetFromEachSource} books)`);
+    const best21stBooks = getHighlyRatedBest21stCentury(4.0, targetFromEachSource * 4); // Get more candidates
+    // Shuffle for variety
+    const shuffled21st = best21stBooks.sort(() => Math.random() - 0.5);
+    console.log(`🔍 DEBUG: Found ${shuffled21st.length} 21st century books:`, shuffled21st.slice(0, 5).map(b => `"${b.title}" by ${b.author}`));
+    let added21st = 0;
+    for (const book of shuffled21st) {
+      if (added21st >= targetFromEachSource || recommendations.length >= 5) break;
+      console.log(`🔍 Checking 21st century book: "${book.title}" by ${book.author}`);
+      if (canAddBook(book)) {
+        addBookToTracking(book);
+        recommendations.push({
+          ...book,
+          score: 85 + Math.floor(Math.random() * 10),
+          reasons: ['Acclaimed 21st century literature', 'Highly rated']
+        });
+        added21st++;
+        console.log(`✅ Added 21st century book: "${book.title}" (${added21st}/${targetFromEachSource})`);
+      }
+    }
+    
+    // B. Goodreads Best Books
+    console.log(`📚 Strategy 2B: Adding Goodreads Best Books (${targetFromEachSource} books)`);
+    const goodreadsBooks = getHighlyRatedGoodreadsBestBooks(4.0, targetFromEachSource * 4); // Lower rating threshold, more books
+    // Shuffle for variety
+    const shuffledGoodreads = goodreadsBooks.sort(() => Math.random() - 0.5);
+    console.log(`🔍 DEBUG: Found ${shuffledGoodreads.length} Goodreads books with 4.0+ rating:`, shuffledGoodreads.slice(0, 5).map(b => `"${b.title}" by ${b.author} (${b.rating})`));
+    let addedGoodreads = 0;
+    for (const book of shuffledGoodreads) {
+      if (addedGoodreads >= targetFromEachSource || recommendations.length >= 5) break;
+      console.log(`🔍 Checking Goodreads book: "${book.title}" by ${book.author}`);
+      if (canAddBook(book)) {
+        addBookToTracking(book);
+        recommendations.push({
+          ...book,
+          score: 80 + Math.floor(Math.random() * 15),
+          reasons: ['Goodreads Best Books Ever', 'Beloved by readers']
+        });
+        addedGoodreads++;
+        console.log(`✅ Added Goodreads book: "${book.title}" (${addedGoodreads}/${targetFromEachSource})`);
+      } else {
+        console.log(`❌ Rejected Goodreads book: "${book.title}" (already added or in library)`);
+      }
+    }
+    
+    // C. New Yorker Literary Picks
+    console.log(`📰 Strategy 2C: Adding New Yorker Literary Picks (${targetFromEachSource} books)`);
+    const newYorkerBooks = getNewYorkerAwardWinners(targetFromEachSource * 4);
+    // Shuffle for variety
+    const shuffledNewYorker = newYorkerBooks.sort(() => Math.random() - 0.5);
+    console.log(`🔍 DEBUG: Found ${shuffledNewYorker.length} New Yorker books:`, shuffledNewYorker.slice(0, 5).map(b => `"${b.title}" by ${b.author}`));
+    let addedNewYorker = 0;
+    for (const book of shuffledNewYorker) {
+      if (addedNewYorker >= targetFromEachSource || recommendations.length >= 5) break;
+      console.log(`🔍 Checking New Yorker book: "${book.title}" by ${book.author}`);
+      if (canAddBook(book)) {
+        addBookToTracking(book);
+        recommendations.push({
+          ...book,
+          score: 85 + Math.floor(Math.random() * 10),
+          reasons: ['Award winner', 'Literary excellence']
+        });
+        addedNewYorker++;
+        console.log(`✅ Added New Yorker book: "${book.title}" (${addedNewYorker}/${targetFromEachSource})`);
+      } else {
+        console.log(`❌ Rejected New Yorker book: "${book.title}" (already added or in library)`);
+      }
+    }
+    
+    // D. Brookline Booksmith Indie Picks
+    console.log(`📚 Strategy 2D: Adding Brookline Booksmith Indie Picks (${targetFromEachSource} books)`);
+    const brooklineBooks = getBrooklineBooksmithStaffPicks(targetFromEachSource * 4);
+    // Shuffle for variety
+    const shuffledBrookline = brooklineBooks.sort(() => Math.random() - 0.5);
+    console.log(`🔍 DEBUG: Found ${shuffledBrookline.length} Brookline books:`, shuffledBrookline.slice(0, 5).map(b => `"${b.title}" by ${b.author}`));
+    let addedBrookline = 0;
+    for (const book of shuffledBrookline) {
+      if (addedBrookline >= targetFromEachSource || recommendations.length >= 5) break;
+      console.log(`🔍 Checking Brookline book: "${book.title}" by ${book.author}`);
+      if (canAddBook(book)) {
+        addBookToTracking(book);
+        recommendations.push({
+          ...book,
+          score: 82 + Math.floor(Math.random() * 8),
+          reasons: ['Indie bookstore favorite', 'Staff pick']
+        });
+        addedBrookline++;
+        console.log(`✅ Added Brookline book: "${book.title}" (${addedBrookline}/${targetFromEachSource})`);
+      } else {
+        console.log(`❌ Rejected Brookline book: "${book.title}" (already added or in library)`);
+      }
+    }
+    
+    console.log(`📊 Strategy 2 Complete: Added ${added21st} 21st Century, ${addedGoodreads} Goodreads, ${addedNewYorker} New Yorker, ${addedBrookline} Brookline books`);
+    
+    // STRATEGY 3: Fill remaining slots if needed
+    if (recommendations.length < 5) {
+      console.log(`🔄 Strategy 3: Filling remaining slots (${recommendations.length}/5)`);
+      
+      // Try more from any source
+      const allCuratedBooks = [
+        ...getRandomGoodreadsBestBooks(3),
+        ...getRecentNewYorkerBooks(4.0, 3),
+        ...getHighRatedBrooklineBooksmith(4.0, 3)
+      ];
+      
+      for (const book of allCuratedBooks) {
+        if (recommendations.length >= 5) break;
+        if (canAddBook(book)) {
+          addBookToTracking(book);
+          recommendations.push({
+            ...book,
+            score: 75 + Math.floor(Math.random() * 15),
+            reasons: ['Curated recommendation', 'High quality']
+          });
+        }
+      }
+    }
+    
+    // Sort by score and return
+    const sortedRecs = recommendations.sort((a, b) => b.score - a.score);
+    const finalRecs = sortedRecs.slice(0, 5);
+    
+    console.log(`🎯 Final result: Returning ${finalRecs.length} recommendations from all sources:`);
+    finalRecs.forEach((rec, i) => {
+      console.log(`   ${i + 1}. "${rec.title}" by ${rec.author} (score: ${rec.score}) - ${rec.reasons?.join(', ') || 'No reasons'}`);
+    });
+    
+    return finalRecs;
+
+  } catch (error) {
+    console.error('Error getting dynamic recommendations:', error);
+    return getBestsellerRecommendations(userBooks, excludeShownIds);
+  }
+};
+    const seenTitleAuthor = new Set<string>(); // Track by title-author combination
+    const authorCount = new Map<string, number>(); // Track author frequency (allow up to 2 per author)
+    
+    // Get rejected books and shown books to exclude them
+    const rejectedBookIds = storage.getRejectedBooks();
+    rejectedBookIds.forEach(id => seenBooks.add(id));
+    excludeShownIds.forEach(id => seenBooks.add(id));
     
     // Get liked books preferences for improving recommendations
     const likedIds = storage.getLikedRecommendations();
-    // We'll need to fetch liked books data from previous recommendations
-    // For now, we'll use the library books and combine with user behavior
+    console.log(`👍 Found ${likedIds.length} liked recommendations for preference learning`);
     
     // Helper function to create unique key for book
     const getBookKey = (book: Book) => 
@@ -82,7 +363,7 @@ export const getDynamicRecommendations = async (userBooks: Book[]): Promise<Book
     const getEnhancedBookKey = (book: Book) => 
       `${normalizeTitle(book.title)}-${normalizeAuthor(book.author)}`;
     
-    // Helper function to check if we can add this book (not duplicate and not same author)
+    // Helper function to check if we can add this book (with relaxed author limits)
     const canAddBook = (book: Book): boolean => {
       const bookId = book.id;
       const bookKey = getBookKey(book);
@@ -93,26 +374,26 @@ export const getDynamicRecommendations = async (userBooks: Book[]): Promise<Book
       const isDuplicateId = seenBooks.has(bookId);
       const isDuplicateBookKey = seenTitleAuthor.has(bookKey);
       const isDuplicateEnhanced = seenTitleAuthor.has(enhancedBookKey);
-      const isDuplicateAuthor = seenAuthors.has(normalizedAuthor);
+      const authorExceededLimit = (authorCount.get(normalizedAuthor) || 0) >= 3; // Increased to 3 books per author
       const isInLibrary = isBookInUserLibrary(book, userBooks);
       
-      // Debug logging
-      if (isDuplicateId || isDuplicateBookKey || isDuplicateEnhanced || isDuplicateAuthor) {
-        console.log(`🚫 Blocking duplicate: "${book.title}" by ${book.author}`, {
-          isDuplicateId,
-          isDuplicateBookKey,
-          isDuplicateEnhanced,
-          isDuplicateAuthor,
-          normalizedAuthor,
-          bookKey,
-          enhancedBookKey
-        });
-      }
+      // Debug logging for every book being checked
+      console.log(`🔍 Checking: "${book.title}" by ${book.author}`, {
+        isDuplicateId,
+        isDuplicateBookKey,
+        isDuplicateEnhanced,
+        authorExceededLimit,
+        currentAuthorCount: authorCount.get(normalizedAuthor) || 0,
+        isInLibrary,
+        bookId,
+        normalizedAuthor,
+        canAdd: !isDuplicateId && !isDuplicateBookKey && !isDuplicateEnhanced && !authorExceededLimit && !isInLibrary
+      });
       
       return !isDuplicateId && 
              !isDuplicateBookKey && 
              !isDuplicateEnhanced &&
-             !isDuplicateAuthor &&
+             !authorExceededLimit &&
              !isInLibrary;
     };
     
@@ -125,65 +406,115 @@ export const getDynamicRecommendations = async (userBooks: Book[]): Promise<Book
       seenBooks.add(book.id);
       seenTitleAuthor.add(bookKey);
       seenTitleAuthor.add(enhancedBookKey); // Track both keys
-      seenAuthors.add(normalizedAuthor);
+      
+      // Increment author count
+      const currentCount = authorCount.get(normalizedAuthor) || 0;
+      authorCount.set(normalizedAuthor, currentCount + 1);
       
       // Debug logging
       console.log(`✅ Added to tracking: "${book.title}" by ${book.author}`, {
         bookId: book.id,
         normalizedAuthor,
+        authorCount: currentCount + 1,
         bookKey,
         enhancedBookKey
       });
     };
     
-    // Function to boost score based on liked books preferences
+    // Enhanced function to boost score based on user's library preferences and liked books
     const boostScoreBasedOnLikes = (book: Book, baseScore: number): number => {
-      if (likedIds.length === 0) return baseScore;
-      
       let bonus = 0;
       
-      // Get preferred genres from user's library (high-rated books)
-      const favoriteGenres = userBooks
-        .filter(b => b.rating >= 4)
-        .flatMap(b => b.genre);
+      // Get user's reading patterns from their library
+      const highRatedBooks = userBooks.filter(b => b.rating >= 4);
+      const allReadBooks = userBooks.filter(b => !b.rating || b.rating >= 3);
+      
+      // Analyze preferred genres from user's entire library (not just highly rated)
+      const allGenres = allReadBooks.flatMap(b => b.genre);
+      const favoriteGenres = highRatedBooks.flatMap(b => b.genre);
       
       const genreFreq = new Map<string, number>();
-      favoriteGenres.forEach(genre => {
+      const favoriteGenreFreq = new Map<string, number>();
+      
+      allGenres.forEach(genre => {
         genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
       });
       
-      // Boost for preferred genres
+      favoriteGenres.forEach(genre => {
+        favoriteGenreFreq.set(genre, (favoriteGenreFreq.get(genre) || 0) + 1);
+      });
+      
+      // Boost for genres the user reads (stronger boost for highly rated genres)
       book.genre.forEach(genre => {
-        const frequency = genreFreq.get(genre) || 0;
-        if (frequency > 0) {
-          bonus += Math.min(15, frequency * 5); // Up to 15 points for popular genres
+        const totalFreq = genreFreq.get(genre) || 0;
+        const favoriteFreq = favoriteGenreFreq.get(genre) || 0;
+        
+        if (favoriteFreq > 0) {
+          bonus += Math.min(20, favoriteFreq * 8); // Strong boost for loved genres
+        } else if (totalFreq > 0) {
+          bonus += Math.min(10, totalFreq * 4); // Moderate boost for read genres
         }
       });
       
-      // Boost for preferred rating range
-      const preferredRatingMin = 3.5; // Based on user's liked books
-      if (book.rating >= preferredRatingMin) {
-        bonus += Math.min(10, (book.rating - preferredRatingMin) * 4);
+      // Analyze user's preferred rating range
+      const userRatings = userBooks.filter(b => b.rating).map(b => b.rating);
+      if (userRatings.length > 0) {
+        const avgUserRating = userRatings.reduce((sum, r) => sum + r, 0) / userRatings.length;
+        const ratingDiff = Math.abs(book.rating - avgUserRating);
+        
+        if (ratingDiff <= 0.5) bonus += 12; // Very close to user's average
+        else if (ratingDiff <= 1.0) bonus += 8; // Reasonably close
+        else if (book.rating >= avgUserRating + 0.5) bonus += 5; // Higher than user's average
       }
       
-      // Boost for recent years if user likes newer books
-      const currentYear = new Date().getFullYear();
-      const recentThreshold = currentYear - 10;
-      const bookYear = book.year || 0;
-      if (bookYear >= recentThreshold) {
-        bonus += 5;
+      // Boost for high-quality books regardless of user preference
+      if (book.rating >= 4.5) bonus += 8;
+      else if (book.rating >= 4.0) bonus += 5;
+      
+      // Analyze user's preferred publication years
+      const userYears = userBooks.filter(b => b.year).map(b => b.year!).filter(year => year > 0);
+      if (userYears.length > 0 && book.year) {
+        const avgYear = userYears.reduce((sum, y) => sum + y, 0) / userYears.length;
+        const currentYear = new Date().getFullYear();
+        
+        // If user tends to read newer books, boost recent publications
+        if (avgYear >= currentYear - 15 && book.year >= currentYear - 10) {
+          bonus += 6;
+        }
+        // If user reads older books, don't penalize older publications
+        else if (avgYear < currentYear - 15 && book.year < currentYear - 10) {
+          bonus += 4;
+        }
       }
+      
+      // Extra boost if book matches multiple user preferences
+      const genreMatches = book.genre.filter(g => genreFreq.has(g)).length;
+      if (genreMatches >= 2) bonus += 5; // Multiple genre matches
       
       return Math.min(100, baseScore + bonus);
     };
 
-    // Strategy 1: Find similar books based on user's highest-rated books
-    const favoriteBooks = userBooks.filter(book => book.rating >= 4).slice(0, 3);
+    // Strategy 1: Find similar books based on ALL user's books (not just highly rated)
+    // Include books with rating >= 3 or no rating (user added them for a reason)
+    const booksForRecommendations = userBooks
+      .filter(book => !book.rating || book.rating >= 3)
+      .sort((a, b) => (b.rating || 3.5) - (a.rating || 3.5))
+      .slice(0, 5); // Use more books for better variety
     
-    for (const book of favoriteBooks) {
-      const similarBooks = await searchSimilarBooks(book.genre, book.author);
+    console.log(`📚 Strategy 1: Using ${booksForRecommendations.length} user books for recommendations:`, 
+      booksForRecommendations.map(b => `"${b.title}" by ${b.author} (${b.rating || 'unrated'})`));
+    
+    for (const book of booksForRecommendations) {
+      if (recommendations.length >= 15) break; // Allow collecting more initially
       
-      for (const googleBook of similarBooks.slice(0, 5)) { // Get more to account for deduplication
+      console.log(`🔍 Strategy 1: Searching for books similar to "${book.title}" (genres: ${book.genre.join(', ')})`);
+      
+      // Search for books similar to this user's book
+      const similarBooks = await searchSimilarBooks(book.genre, book.author);
+      console.log(`📖 Strategy 1: Found ${similarBooks.length} similar books for "${book.title}"`);
+      
+      let addedForThisBook = 0;
+      for (const googleBook of similarBooks.slice(0, 8)) { // More books to account for deduplication
         const convertedBook = convertGoogleBookToBook(googleBook);
         
         if (canAddBook(convertedBook)) {
@@ -192,66 +523,471 @@ export const getDynamicRecommendations = async (userBooks: Book[]): Promise<Book
           const boostedScore = boostScoreBasedOnLikes(convertedBook, baseScore);
           recommendations.push({
             ...convertedBook,
-            score: boostedScore,
-            reasons: [`Similar to "${book.title}"`],
+            score: boostedScore + 20, // Boost user-library based recommendations
+            reasons: [`Similar to your book "${book.title}"`, `Shares ${book.genre.slice(0,2).join(', ')} genre${book.genre.length > 1 ? 's' : ''}`],
             similarTo: book.title
           });
+          addedForThisBook++;
           
-          // Limit per strategy to ensure variety
-          if (recommendations.length >= 3) break;
+          // Limit per book but allow more total
+          if (addedForThisBook >= 3) break;
         }
       }
-      if (recommendations.length >= 3) break;
+      console.log(`✅ Strategy 1: Added ${addedForThisBook} recommendations for "${book.title}" (total so far: ${recommendations.length})`);
     }
-
-    // Strategy 2: Trending books in different genres (skip author strategy to ensure variety)
-    const userGenres = [...new Set(userBooks.flatMap(book => book.genre))];
     
-    for (const genre of userGenres.slice(0, 3)) {
-      if (recommendations.length >= 6) break; // Leave room for other strategies
+    console.log(`📊 Strategy 1 Complete: ${recommendations.length} total recommendations`);
+
+    // Strategy 2: More books by authors the user already has and likes
+    const userAuthors = [...new Set(userBooks
+      .filter(book => !book.rating || book.rating >= 3.5)
+      .map(book => book.author))]
+      .slice(0, 3);
+    
+    console.log(`👥 Strategy 2: Looking for more books by user's authors: ${userAuthors.join(', ')}`);
+    const strategy2StartCount = recommendations.length;
+    
+    for (const author of userAuthors) {
+      if (recommendations.length >= 20) break; // Allow collecting more initially
       
-      const bestsellers = await getBestsellersByGenre(genre);
+      console.log(`🔍 Strategy 2: Searching for more books by "${author}"`);
       
-      for (const nytBook of bestsellers.slice(0, 4)) { // Get more to account for deduplication
-        const convertedBook = convertNYTBookToBook(nytBook);
+      try {
+        // Search for more books by this author
+        const authorBooks = await searchBooksByAuthorEnhanced(author);
+        console.log(`📖 Strategy 2: Found ${authorBooks.length} books by "${author}"`);
         
-        // Try to enhance with Google Books data
-        try {
-          const googleBooks = await searchGoogleBooks(convertedBook.title, convertedBook.author);
-          if (googleBooks.length > 0) {
-            const enhancedBook = convertGoogleBookToBook(googleBooks[0]);
-            // Merge enhanced data while keeping original ID
-            convertedBook.summary = enhancedBook.summary || convertedBook.summary;
-            convertedBook.rating = enhancedBook.rating || convertedBook.rating;
-            convertedBook.coverUrl = enhancedBook.coverUrl || convertedBook.coverUrl;
-            convertedBook.genre = enhancedBook.genre.length > 1 ? enhancedBook.genre : convertedBook.genre;
-          }
-        } catch (error) {
-          // Continue without enhancement if Google Books fails
-        }
-        
-        if (canAddBook(convertedBook)) {
-          addBookToTracking(convertedBook);
-          const baseScore = 75 + Math.floor(Math.random() * 15);
-          const boostedScore = boostScoreBasedOnLikes(convertedBook, baseScore);
-          recommendations.push({
-            ...convertedBook,
-            score: boostedScore,
-            reasons: [`Trending in ${genre}`, 'Popular choice among readers']
-          });
+        let addedForThisAuthor = 0;
+        for (const googleBook of authorBooks.slice(0, 6)) {
+          const convertedBook = convertGoogleBookToBook(googleBook);
           
-          // Limit per genre to ensure variety
-          if (recommendations.filter(r => r.reasons.some(reason => reason.includes(genre))).length >= 1) break;
+          if (canAddBook(convertedBook)) {
+            addBookToTracking(convertedBook);
+            const baseScore = 85 + Math.floor(Math.random() * 10);
+            const boostedScore = boostScoreBasedOnLikes(convertedBook, baseScore);
+            recommendations.push({
+              ...convertedBook,
+              score: boostedScore + 15, // Boost for familiar authors
+              reasons: [`More by ${author}`, 'Author from your library'],
+              similarTo: author
+            });
+            addedForThisAuthor++;
+            
+            // One book per author to maintain variety
+            break;
+          }
         }
+        console.log(`✅ Strategy 2: Added ${addedForThisAuthor} books by "${author}" (total so far: ${recommendations.length})`);
+      } catch (error) {
+        console.log(`❌ Strategy 2: Could not find more books by ${author}:`, error);
       }
     }
+    
+    console.log(`📊 Strategy 2 Complete: Added ${recommendations.length - strategy2StartCount} recommendations (total: ${recommendations.length})`);
 
-    // Strategy 3: Fill remaining slots with diverse general bestsellers
+    // Strategy 3: Find more books in user's preferred genres (before falling back to generic bestsellers)
     if (recommendations.length < 8) {
-      const mixedBestsellers = await getMixedBestsellers();
+      console.log(`🎯 Strategy 3: Need more recommendations (${recommendations.length}/8), searching user's preferred genres`);
       
+      // Get user's favorite genres from their library
+      const userGenres = userBooks
+        .filter(book => !book.rating || book.rating >= 3)
+        .flatMap(book => book.genre);
+      
+      const genreFreq = new Map<string, number>();
+      userGenres.forEach(genre => {
+        genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
+      });
+      
+      // Sort genres by frequency (user's preferred genres)
+      const topGenres = Array.from(genreFreq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([genre]) => genre);
+      
+      console.log(`🎯 Strategy 3: Looking for books in user's preferred genres: ${topGenres.join(', ')}`);
+      const strategy3StartCount = recommendations.length;
+      
+      // Search for books in user's preferred genres
+      for (const genre of topGenres) {
+        if (recommendations.length >= 25) break;
+        
+        console.log(`🔍 Strategy 3: Searching for "${genre}" books`);
+        
+        try {
+          const genreBooks = await searchGoogleBooks(`subject:${genre}`);
+          console.log(`📖 Strategy 3: Found ${genreBooks.length} books for genre "${genre}"`);
+          
+          let addedForThisGenre = 0;
+          for (const googleBook of genreBooks.slice(0, 8)) {
+            const convertedBook = convertGoogleBookToBook(googleBook);
+            
+            if (canAddBook(convertedBook)) {
+              addBookToTracking(convertedBook);
+              const baseScore = 75 + Math.floor(Math.random() * 10);
+              const boostedScore = boostScoreBasedOnLikes(convertedBook, baseScore);
+              recommendations.push({
+                ...convertedBook,
+                score: boostedScore + 10, // Boost for matching user's genre preferences
+                reasons: [`Matches your ${genre} preference`, 'Based on your reading history'],
+                similarTo: undefined
+              });
+              addedForThisGenre++;
+              
+              // One book per genre to maintain variety
+              break;
+            }
+          }
+          console.log(`✅ Strategy 3: Added ${addedForThisGenre} books for "${genre}" (total so far: ${recommendations.length})`);
+        } catch (error) {
+          console.log(`❌ Strategy 3: Could not find books for genre ${genre}:`, error);
+        }
+      }
+      
+      console.log(`📊 Strategy 3 Complete: Added ${recommendations.length - strategy3StartCount} recommendations (total: ${recommendations.length})`);
+    } else {
+      console.log(`⏭️ Strategy 3 Skipped: Already have ${recommendations.length} recommendations (>= 8)`);
+    }
+
+    // Strategy 4: Use acclaimed 21st century books as high-quality recommendations
+    if (recommendations.length < 10) {
+      console.log(`🏆 Strategy 4: Need more recommendations (${recommendations.length}/10), adding acclaimed 21st century books`);
+      const strategy4StartCount = recommendations.length;
+      
+      // Get user's preferred genres to find matching acclaimed books
+      const userGenres = userBooks
+        .filter(book => !book.rating || book.rating >= 3)
+        .flatMap(book => book.genre);
+      
+      const genreFreq = new Map<string, number>();
+      userGenres.forEach(genre => {
+        genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
+      });
+      
+      const topGenres = Array.from(genreFreq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([genre]) => genre);
+      
+      console.log(`🏆 Strategy 4: Looking for acclaimed books in genres: ${topGenres.join(', ')}`);
+      
+      // First try to get acclaimed books in user's preferred genres
+      let acclaimedBooks: Book[] = [];
+      if (topGenres.length > 0) {
+        for (const genre of topGenres) {
+          const genreBooks = getBest21stCenturyBooksByGenre(genre, 3);
+          console.log(`📖 Strategy 4: Found ${genreBooks.length} acclaimed books for genre "${genre}"`);
+          acclaimedBooks.push(...genreBooks);
+          if (acclaimedBooks.length >= 6) break;
+        }
+      }
+      
+      // Fill remaining with highly rated acclaimed books
+      if (acclaimedBooks.length < 6) {
+        const highlyRated = getHighlyRatedBest21stCentury(4.0, 6 - acclaimedBooks.length);
+        console.log(`📖 Strategy 4: Added ${highlyRated.length} highly rated acclaimed books (4.0+ rating)`);
+        acclaimedBooks.push(...highlyRated);
+      }
+      
+      // Add some award winners for prestige
+      const awardWinners = getAwardWinningBest21stCentury(3);
+      console.log(`📖 Strategy 4: Added ${awardWinners.length} award-winning acclaimed books`);
+      acclaimedBooks.push(...awardWinners);
+      
+      console.log(`📚 Strategy 4: Total acclaimed books to process: ${acclaimedBooks.length}`);
+      
+      let addedAcclaimed = 0;
+      for (const book of acclaimedBooks) {
+        if (recommendations.length >= 30) break;
+        
+        if (canAddBook(book)) {
+          addBookToTracking(book);
+          const baseScore = 80 + Math.floor(Math.random() * 15); // High base score for acclaimed books
+          const boostedScore = boostScoreBasedOnLikes(book, baseScore);
+          
+          const reasons = ['Acclaimed 21st century literature'];
+          if (book.tags?.some(tag => tag.name.includes('pulitzer-winner'))) reasons.push('Pulitzer Prize winner');
+          if (book.tags?.some(tag => tag.name.includes('nobel-winner'))) reasons.push('Nobel Prize winner');
+          if (book.tags?.some(tag => tag.name.includes('booker-winner'))) reasons.push('Booker Prize winner');
+          if (book.rating >= 4.2) reasons.push('Highly rated by critics');
+          
+          recommendations.push({
+            ...book,
+            score: boostedScore + 10, // Extra boost for acclaimed literature
+            reasons: reasons.slice(0, 3)
+          });
+          addedAcclaimed++;
+        }
+      }
+      
+      console.log(`📊 Strategy 4 Complete: Added ${addedAcclaimed} acclaimed books (total: ${recommendations.length})`);
+    } else {
+      console.log(`⏭️ Strategy 4 Skipped: Already have ${recommendations.length} recommendations (>= 10)`);
+    }
+
+    // Strategy 5: Add Goodreads "Best Books Ever" recommendations
+    if (recommendations.length < 12) {
+      console.log(`📚 Strategy 5: Need more recommendations (${recommendations.length}/12), adding Goodreads Best Books Ever`);
+      const strategy5StartCount = recommendations.length;
+      
+      // Get user's preferred genres to find matching Goodreads best books
+      const userGenres = userBooks
+        .filter(book => !book.rating || book.rating >= 3)
+        .flatMap(book => book.genre);
+      
+      const genreFreq = new Map<string, number>();
+      userGenres.forEach(genre => {
+        genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
+      });
+      
+      const topGenres = Array.from(genreFreq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([genre]) => genre);
+      
+      console.log(`📚 Strategy 5: Looking for Goodreads best books in genres: ${topGenres.join(', ')}`);
+      
+      let goodreadsBooks: Book[] = [];
+      
+      // First, try to get Goodreads best books in user's preferred genres
+      if (topGenres.length > 0) {
+        for (const genre of topGenres) {
+          const genreBooks = getGoodreadsBestBooksByGenre(genre, 3);
+          console.log(`📖 Strategy 5: Found ${genreBooks.length} Goodreads best books for genre "${genre}"`);
+          goodreadsBooks.push(...genreBooks);
+          if (goodreadsBooks.length >= 6) break;
+        }
+      }
+      
+      // Fill remaining with highly rated Goodreads best books
+      if (goodreadsBooks.length < 6) {
+        const highlyRated = getHighlyRatedGoodreadsBestBooks(4.2, 6 - goodreadsBooks.length);
+        console.log(`📖 Strategy 5: Added ${highlyRated.length} highly rated Goodreads best books (4.2+ rating)`);
+        goodreadsBooks.push(...highlyRated);
+      }
+      
+      // Add some classics for variety
+      if (goodreadsBooks.length < 8) {
+        const classics = getGoodreadsClassicBooks(3);
+        console.log(`📖 Strategy 5: Added ${classics.length} classic Goodreads best books`);
+        goodreadsBooks.push(...classics);
+      }
+      
+      console.log(`📚 Strategy 5: Total Goodreads best books to process: ${goodreadsBooks.length}`);
+      
+      let addedGoodreads = 0;
+      for (const book of goodreadsBooks) {
+        if (recommendations.length >= 35) break;
+        
+        if (canAddBook(book)) {
+          addBookToTracking(book);
+          const baseScore = 75 + Math.floor(Math.random() * 15); // Good base score for popular books
+          const boostedScore = boostScoreBasedOnLikes(book, baseScore);
+          
+          const reasons = ['Goodreads Best Books Ever'];
+          if (book.tags?.some(tag => tag.name.includes('classic'))) reasons.push('Beloved classic');
+          if (book.tags?.some(tag => tag.name.includes('bestseller'))) reasons.push('Bestseller');
+          if (book.rating >= 4.3) reasons.push('Highly rated by readers');
+          if (book.tags?.some(tag => tag.name.includes('award-winner'))) reasons.push('Award winner');
+          
+          recommendations.push({
+            ...book,
+            score: boostedScore + 5, // Small boost for being on best books list
+            reasons: reasons.slice(0, 3)
+          });
+          addedGoodreads++;
+        }
+      }
+      
+      console.log(`📊 Strategy 5 Complete: Added ${addedGoodreads} Goodreads best books (total: ${recommendations.length})`);
+    } else {
+      console.log(`⏭️ Strategy 5 Skipped: Already have ${recommendations.length} recommendations (>= 12)`);
+    }
+
+    // Strategy 6: Add New Yorker-style literary recommendations (award winners and critically acclaimed)
+    if (recommendations.length < 15) {
+      console.log(`📰 Strategy 6: Need more recommendations (${recommendations.length}/15), adding New Yorker-style literary picks`);
+      const strategy6StartCount = recommendations.length;
+      
+      // Get user's preferred genres to find matching literary works
+      const userGenres = userBooks
+        .filter(book => !book.rating || book.rating >= 3)
+        .flatMap(book => book.genre);
+      
+      const genreFreq = new Map<string, number>();
+      userGenres.forEach(genre => {
+        genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
+      });
+      
+      const topGenres = Array.from(genreFreq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([genre]) => genre);
+      
+      console.log(`📰 Strategy 6: Looking for New Yorker-style books in genres: ${topGenres.join(', ')}`);
+      
+      let newYorkerBooks: Book[] = [];
+      
+      // First, try to get New Yorker-style books in user's preferred genres
+      if (topGenres.length > 0) {
+        for (const genre of topGenres) {
+          const genreBooks = getNewYorkerBooksByGenre(genre, 2);
+          console.log(`📖 Strategy 6: Found ${genreBooks.length} New Yorker-style books for genre "${genre}"`);
+          newYorkerBooks.push(...genreBooks);
+          if (newYorkerBooks.length >= 4) break;
+        }
+      }
+      
+      // Add award winners for prestige
+      if (newYorkerBooks.length < 6) {
+        const awardWinners = getNewYorkerAwardWinners(4);
+        console.log(`📖 Strategy 6: Added ${awardWinners.length} New Yorker-style award winners`);
+        newYorkerBooks.push(...awardWinners);
+      }
+      
+      // Fill remaining with recent highly rated literary works
+      if (newYorkerBooks.length < 8) {
+        const recentBooks = getRecentNewYorkerBooks(4.1, 4);
+        console.log(`📖 Strategy 6: Added ${recentBooks.length} recent New Yorker-style books (4.1+ rating)`);
+        newYorkerBooks.push(...recentBooks);
+      }
+      
+      // Add some literary fiction for sophistication
+      if (newYorkerBooks.length < 10) {
+        const literaryFiction = getNewYorkerLiteraryFiction(3);
+        console.log(`📖 Strategy 6: Added ${literaryFiction.length} New Yorker-style literary fiction`);
+        newYorkerBooks.push(...literaryFiction);
+      }
+      
+      console.log(`📰 Strategy 6: Total New Yorker-style books to process: ${newYorkerBooks.length}`);
+      
+      let addedNewYorker = 0;
+      for (const book of newYorkerBooks) {
+        if (recommendations.length >= 40) break;
+        
+        if (canAddBook(book)) {
+          addBookToTracking(book);
+          const baseScore = 80 + Math.floor(Math.random() * 15); // High base score for literary prestige
+          const boostedScore = boostScoreBasedOnLikes(book, baseScore);
+          
+          const reasons = ['New Yorker-style literary pick'];
+          if (book.tags?.some(tag => tag.name.includes('pulitzer'))) reasons.push('Pulitzer Prize winner');
+          if (book.tags?.some(tag => tag.name.includes('booker'))) reasons.push('Booker Prize winner');
+          if (book.tags?.some(tag => tag.name.includes('national-book-award'))) reasons.push('National Book Award');
+          if (book.rating >= 4.3) reasons.push('Critically acclaimed');
+          if (book.tags?.some(tag => tag.name.includes('literary'))) reasons.push('Literary excellence');
+          
+          recommendations.push({
+            ...book,
+            score: boostedScore + 10, // Boost for literary prestige
+            reasons: reasons.slice(0, 3)
+          });
+          addedNewYorker++;
+        }
+      }
+      
+      console.log(`📊 Strategy 6 Complete: Added ${addedNewYorker} New Yorker-style books (total: ${recommendations.length})`);
+    } else {
+      console.log(`⏭️ Strategy 6 Skipped: Already have ${recommendations.length} recommendations (>= 15)`);
+    }
+
+    // Strategy 7: Add Brookline Booksmith-style independent bookstore recommendations
+    if (recommendations.length < 18) {
+      console.log(`📚 Strategy 7: Need more recommendations (${recommendations.length}/18), adding Brookline Booksmith indie bookstore picks`);
+      const strategy7StartCount = recommendations.length;
+      
+      // Get user's preferred genres for targeted indie bookstore recommendations
+      const userGenres = userBooks
+        .filter(book => !book.rating || book.rating >= 3)
+        .flatMap(book => book.genre);
+      
+      const genreFreq = new Map<string, number>();
+      userGenres.forEach(genre => {
+        genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
+      });
+      
+      const topGenres = Array.from(genreFreq.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([genre]) => genre);
+      
+      console.log(`📚 Strategy 7: Looking for Brookline Booksmith books in genres: ${topGenres.join(', ')}`);
+      
+      let brooklineBooks: Book[] = [];
+      
+      // First, get staff picks style mix for variety
+      const staffPicks = getBrooklineBooksmithStaffPicks(4);
+      console.log(`📖 Strategy 7: Added ${staffPicks.length} staff pick style recommendations`);
+      brooklineBooks.push(...staffPicks);
+      
+      // Add books in user's preferred genres
+      if (topGenres.length > 0) {
+        for (const genre of topGenres) {
+          const genreBooks = getBrooklineBooksmithByGenre(genre, 2);
+          console.log(`📖 Strategy 7: Found ${genreBooks.length} Brookline Booksmith books for genre "${genre}"`);
+          brooklineBooks.push(...genreBooks);
+          if (brooklineBooks.length >= 8) break;
+        }
+      }
+      
+      // Add some diverse voices (independent bookstore specialty)
+      if (brooklineBooks.length < 10) {
+        const diverseVoices = getBrooklineBooksmithDiverseVoices(3);
+        console.log(`📖 Strategy 7: Added ${diverseVoices.length} diverse voice recommendations`);
+        brooklineBooks.push(...diverseVoices);
+      }
+      
+      // Fill remaining with recent highly rated picks
+      if (brooklineBooks.length < 12) {
+        const recentBooks = getRecentBrooklineBooksmith(3, 4);
+        console.log(`📖 Strategy 7: Added ${recentBooks.length} recent Brookline Booksmith picks`);
+        brooklineBooks.push(...recentBooks);
+      }
+      
+      console.log(`📚 Strategy 7: Total Brookline Booksmith books to process: ${brooklineBooks.length}`);
+      
+      let addedBrookline = 0;
+      for (const book of brooklineBooks) {
+        if (recommendations.length >= 45) break;
+        
+        if (canAddBook(book)) {
+          addBookToTracking(book);
+          const baseScore = 75 + Math.floor(Math.random() * 15); // Good base score for indie bookstore curation
+          const boostedScore = boostScoreBasedOnLikes(book, baseScore);
+          
+          const reasons = ['Indie bookstore favorite'];
+          if (book.rating >= 4.3) reasons.push('Highly rated');
+          if (book.tags?.some(tag => tag.name.includes('literary'))) reasons.push('Literary pick');
+          if (book.tags?.some(tag => tag.name.includes('diverse') || tag.name.includes('lgbtq') || tag.name.includes('african-american'))) {
+            reasons.push('Diverse voices');
+          }
+          if (book.year >= 2020) reasons.push('Recent favorite');
+          
+          recommendations.push({
+            ...book,
+            score: boostedScore + 5, // Small boost for indie bookstore curation
+            reasons: reasons.slice(0, 3)
+          });
+          addedBrookline++;
+        }
+      }
+      
+      console.log(`📊 Strategy 7 Complete: Added ${addedBrookline} Brookline Booksmith books (total: ${recommendations.length})`);
+    } else {
+      console.log(`⏭️ Strategy 7 Skipped: Already have ${recommendations.length} recommendations (>= 18)`);
+    }
+
+    // Strategy 8: Only fall back to current bestsellers if we still need more recommendations AND user has few books
+    if (recommendations.length < 8 && userBooks.length < 3) {
+      console.log(`📈 Strategy 8: Need more recommendations (${recommendations.length}/8) for new user (${userBooks.length} books), adding bestsellers`);
+      const strategy8StartCount = recommendations.length;
+      
+      const mixedBestsellers = await getMixedBestsellers();
+      console.log(`📖 Strategy 8: Found ${mixedBestsellers.length} bestsellers to process`);
+      
+      let addedBestsellers = 0;
       for (const nytBook of mixedBestsellers) {
-        if (recommendations.length >= 12) break;
+        if (recommendations.length >= 35) break;
         
         const convertedBook = convertNYTBookToBook(nytBook);
         
@@ -272,56 +1008,138 @@ export const getDynamicRecommendations = async (userBooks: Book[]): Promise<Book
         
         if (canAddBook(convertedBook)) {
           addBookToTracking(convertedBook);
-          const baseScore = 70 + Math.floor(Math.random() * 10);
+          const baseScore = 65 + Math.floor(Math.random() * 10); // Lower base score for generic bestsellers
           const boostedScore = boostScoreBasedOnLikes(convertedBook, baseScore);
           recommendations.push({
             ...convertedBook,
             score: boostedScore,
-            reasons: ['Currently popular', 'Bestseller across categories']
+            reasons: ['Popular choice', 'Widely recommended']
           });
+          addedBestsellers++;
         }
       }
+      
+      console.log(`📊 Strategy 8 Complete: Added ${addedBestsellers} bestsellers (total: ${recommendations.length})`);
+    } else {
+      console.log(`⏭️ Strategy 8 Skipped: Have ${recommendations.length} recommendations (>= 8) or experienced user (${userBooks.length} books)`);
     }
 
-    // Final deduplication pass to ensure no duplicates slip through
+    // Enhanced final deduplication pass to ensure no duplicates slip through
     const finalDeduplication = (recs: BookRecommendation[]): BookRecommendation[] => {
+      console.log(`🔧 Final deduplication starting with ${recs.length} recommendations`);
+      
       const seen = new Set<string>();
-      const seenAuthors = new Set<string>();
+      const seenEnhanced = new Set<string>();
+      const finalAuthorCount = new Map<string, number>();
+      const seenIds = new Set<string>();
       const deduplicated: BookRecommendation[] = [];
       
       for (const rec of recs) {
-        const bookKey = `${normalizeTitle(rec.title)}-${normalizeAuthor(rec.author)}`;
+        const basicKey = `${rec.title.toLowerCase().trim()}-${rec.author.toLowerCase().trim()}`;
+        const enhancedKey = `${normalizeTitle(rec.title)}-${normalizeAuthor(rec.author)}`;
         const authorKey = normalizeAuthor(rec.author);
+        const idKey = rec.id;
         
-        if (!seen.has(bookKey) && !seenAuthors.has(authorKey)) {
-          seen.add(bookKey);
-          seenAuthors.add(authorKey);
+        const isDuplicateBasic = seen.has(basicKey);
+        const isDuplicateEnhanced = seenEnhanced.has(enhancedKey);
+        const authorExceedsLimit = (finalAuthorCount.get(authorKey) || 0) >= 3; // Increased to match main logic
+        const isDuplicateId = seenIds.has(idKey);
+        
+        console.log(`🔧 Final dedup checking: "${rec.title}" by ${rec.author}`, {
+          isDuplicateBasic,
+          isDuplicateEnhanced,
+          authorExceedsLimit,
+          currentAuthorCount: finalAuthorCount.get(authorKey) || 0,
+          isDuplicateId,
+          score: rec.score,
+          willAdd: !isDuplicateBasic && !isDuplicateEnhanced && !authorExceedsLimit && !isDuplicateId
+        });
+        
+        if (!isDuplicateBasic && !isDuplicateEnhanced && !authorExceedsLimit && !isDuplicateId) {
+          seen.add(basicKey);
+          seenEnhanced.add(enhancedKey);
+          finalAuthorCount.set(authorKey, (finalAuthorCount.get(authorKey) || 0) + 1);
+          seenIds.add(idKey);
           deduplicated.push(rec);
-        } else {
-          console.log(`🚫 Final dedup blocked: "${rec.title}" by ${rec.author}`);
+          console.log(`✅ Final dedup added: "${rec.title}" (${deduplicated.length} total)`);
         }
       }
       
+      console.log(`🔧 Final deduplication complete: ${recs.length} → ${deduplicated.length}`);
       return deduplicated;
     };
     
     // Sort by score and return deduplicated top recommendations
     const sortedRecs = recommendations.sort((a, b) => b.score - a.score);
+    console.log(`📊 Pre-dedup analysis: ${recommendations.length} total recommendations collected`);
+    console.log(`📈 Top scores before dedup:`, sortedRecs.slice(0, 10).map(r => `"${r.title}" (${r.score})`));
+    
     const deduplicatedRecs = finalDeduplication(sortedRecs);
     
-    console.log(`📊 Recommendations summary: ${recommendations.length} total, ${deduplicatedRecs.length} after final dedup`);
+    console.log(`📊 Final deduplication summary: ${recommendations.length} total → ${deduplicatedRecs.length} after dedup`);
+    console.log(`📈 Top scores after dedup:`, deduplicatedRecs.slice(0, 10).map(r => `"${r.title}" (${r.score})`));
     
-    return deduplicatedRecs.slice(0, 10);
+    // Ensure exactly 5 unique recommendations
+    let finalRecs = deduplicatedRecs.slice(0, 5);
+    
+    // Emergency fallback: If we have fewer than 3 recommendations, add from our curated sources
+    if (finalRecs.length < 3) {
+      console.log(`🚨 Emergency fallback: Only ${finalRecs.length} recommendations, adding from curated sources`);
+      
+      // Get some guaranteed books from our static sources
+      const fallbackBooks: Book[] = [];
+      
+      // Add from Goodreads best books
+      const goodreadsBooks = getHighlyRatedGoodreadsBestBooks(4.3, 3);
+      fallbackBooks.push(...goodreadsBooks);
+      
+      // Add from New Yorker style books  
+      const newYorkerBooks = getNewYorkerAwardWinners(3);
+      fallbackBooks.push(...newYorkerBooks);
+      
+      // Add from Brookline Booksmith
+      const brooklineBooks = getHighRatedBrooklineBooksmith(4.3, 3);
+      fallbackBooks.push(...brooklineBooks);
+      
+      console.log(`🚨 Processing ${fallbackBooks.length} fallback books`);
+      
+      for (const book of fallbackBooks) {
+        if (finalRecs.length >= 5) break;
+        
+        // Check if this book is already in final recs or user's library
+        const alreadyRecommended = finalRecs.some(rec => 
+          rec.id === book.id || 
+          (rec.title.toLowerCase() === book.title.toLowerCase() && rec.author.toLowerCase() === book.author.toLowerCase())
+        );
+        const inLibrary = isBookInUserLibrary(book, userBooks);
+        
+        if (!alreadyRecommended && !inLibrary) {
+          finalRecs.push({
+            ...book,
+            score: 85 + Math.floor(Math.random() * 10),
+            reasons: ['Emergency fallback', 'Highly rated', 'Curated pick']
+          });
+          console.log(`🚨 Added fallback: "${book.title}" by ${book.author}`);
+        }
+      }
+    }
+    
+    console.log(`🎯 Final result: Returning ${finalRecs.length} unique recommendations:`);
+    finalRecs.forEach((rec, i) => {
+      console.log(`   ${i + 1}. "${rec.title}" by ${rec.author} (score: ${rec.score}) - ${rec.reasons?.join(', ') || 'No reasons'}`);
+    });
+    
+    return finalRecs;
 
   } catch (error) {
     console.error('Error getting dynamic recommendations:', error);
     // Fallback to bestsellers if API calls fail
-    return getBestsellerRecommendations();
+    return getBestsellerRecommendations(userBooks, excludeShownIds);
   }
 };
 
 // Get bestseller recommendations (fallback or for new users)
-export const getBestsellerRecommendations = async (userBooks: Book[] = []): Promise<BookRecommendation[]> => {
+export const getBestsellerRecommendations = async (userBooks: Book[] = [], excludeShownIds: string[] = []): Promise<BookRecommendation[]> => {
   try {
     const bestsellers = await getMixedBestsellers();
     
@@ -329,10 +1147,11 @@ export const getBestsellerRecommendations = async (userBooks: Book[] = []): Prom
     const rejectedBookIds = storage.getRejectedBooks();
     const seenBooks = new Set<string>(); // Track by ID
     const seenTitleAuthor = new Set<string>(); // Track by title-author combination
-    const seenAuthors = new Set<string>(); // Track authors to prevent duplicates
+    const authorCount = new Map<string, number>(); // Track author frequency (allow up to 2 per author)
     
-    // Add rejected books to tracking
+    // Add rejected books and shown books to tracking
     rejectedBookIds.forEach(id => seenBooks.add(id));
+    excludeShownIds.forEach(id => seenBooks.add(id));
     
     // Helper functions (enhanced, same as main function)
     const getBookKey = (book: Book) => 
@@ -361,11 +1180,12 @@ export const getBestsellerRecommendations = async (userBooks: Book[] = []): Prom
       const bookKey = getBookKey(book);
       const enhancedBookKey = getEnhancedBookKey(book);
       const normalizedAuthor = normalizeAuthor(book.author);
+      const authorExceededLimit = (authorCount.get(normalizedAuthor) || 0) >= 2;
       
       return !seenBooks.has(book.id) && 
              !seenTitleAuthor.has(bookKey) && 
              !seenTitleAuthor.has(enhancedBookKey) &&
-             !seenAuthors.has(normalizedAuthor);
+             !authorExceededLimit;
     };
     
     const addBookToTracking = (book: Book) => {
@@ -376,7 +1196,10 @@ export const getBestsellerRecommendations = async (userBooks: Book[] = []): Prom
       seenBooks.add(book.id);
       seenTitleAuthor.add(bookKey);
       seenTitleAuthor.add(enhancedBookKey);
-      seenAuthors.add(normalizedAuthor);
+      
+      // Increment author count
+      const currentCount = authorCount.get(normalizedAuthor) || 0;
+      authorCount.set(normalizedAuthor, currentCount + 1);
     };
     
     // Function to boost score based on user preferences
@@ -443,19 +1266,188 @@ export const getBestsellerRecommendations = async (userBooks: Book[] = []): Prom
       }
     }
     
+    // Add some Goodreads Best Books if we still need more recommendations
+    if (recommendations.length < 5) {
+      console.log(`📚 Adding Goodreads Best Books to fill bestseller recommendations (${recommendations.length}/5)`);
+      
+      let goodreadsBooks: Book[] = [];
+      
+      if (userBooks.length > 0) {
+        // Get user's preferred genres for targeted recommendations
+        const userGenres = userBooks
+          .filter(book => !book.rating || book.rating >= 3)
+          .flatMap(book => book.genre);
+        
+        const genreFreq = new Map<string, number>();
+        userGenres.forEach(genre => {
+          genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
+        });
+        
+        const topGenres = Array.from(genreFreq.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 2)
+          .map(([genre]) => genre);
+        
+        // Try to get books in user's preferred genres first
+        for (const genre of topGenres) {
+          const genreBooks = getGoodreadsBestBooksByGenre(genre, 2);
+          goodreadsBooks.push(...genreBooks);
+        }
+      }
+      
+      // Fill remaining with highly rated classics and popular books
+      if (goodreadsBooks.length < 4) {
+        const classics = getGoodreadsClassicBooks(2);
+        const highlyRated = getHighlyRatedGoodreadsBestBooks(4.2, 3);
+        goodreadsBooks.push(...classics, ...highlyRated);
+      }
+      
+      console.log(`📖 Processing ${goodreadsBooks.length} Goodreads best books for bestseller fallback`);
+      
+      for (const book of goodreadsBooks) {
+        if (recommendations.length >= 8) break;
+        
+        if (canAddBook(book)) {
+          addBookToTracking(book);
+          const baseScore = 75 + Math.floor(Math.random() * 15);
+          const boostedScore = boostScoreForBestsellers(book, baseScore);
+          recommendations.push({
+            ...book,
+            score: boostedScore,
+            reasons: ['Goodreads Best Books Ever', 'Beloved by readers']
+          });
+        }
+      }
+      
+      console.log(`📊 Added Goodreads books, now have ${recommendations.length} total recommendations`);
+    }
+    
+    // Add some New Yorker-style literary books if we still need more recommendations
+    if (recommendations.length < 5) {
+      console.log(`📰 Adding New Yorker-style books to fill bestseller recommendations (${recommendations.length}/5)`);
+      
+      let newYorkerBooks: Book[] = [];
+      
+      if (userBooks.length > 0) {
+        // Get user's preferred genres for targeted literary recommendations
+        const userGenres = userBooks
+          .filter(book => !book.rating || book.rating >= 3)
+          .flatMap(book => book.genre);
+        
+        const genreFreq = new Map<string, number>();
+        userGenres.forEach(genre => {
+          genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
+        });
+        
+        const topGenres = Array.from(genreFreq.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 2)
+          .map(([genre]) => genre);
+        
+        // Try to get literary books in user's preferred genres first
+        for (const genre of topGenres) {
+          const genreBooks = getNewYorkerBooksByGenre(genre, 2);
+          newYorkerBooks.push(...genreBooks);
+        }
+      }
+      
+      // Fill remaining with award winners and recent literary works
+      if (newYorkerBooks.length < 4) {
+        const awardWinners = getNewYorkerAwardWinners(2);
+        const recentBooks = getRecentNewYorkerBooks(4.0, 3);
+        newYorkerBooks.push(...awardWinners, ...recentBooks);
+      }
+      
+      console.log(`📖 Processing ${newYorkerBooks.length} New Yorker-style books for bestseller fallback`);
+      
+      for (const book of newYorkerBooks) {
+        if (recommendations.length >= 8) break;
+        
+        if (canAddBook(book)) {
+          addBookToTracking(book);
+          const baseScore = 85 + Math.floor(Math.random() * 15);
+          const boostedScore = boostScoreForBestsellers(book, baseScore);
+          recommendations.push({
+            ...book,
+            score: boostedScore,
+            reasons: ['Critically acclaimed', 'Literary excellence']
+          });
+        }
+      }
+      
+      console.log(`📊 Added New Yorker-style books, now have ${recommendations.length} total recommendations`);
+    }
+    
+    // Add some Brookline Booksmith indie bookstore picks if we still need more recommendations
+    if (recommendations.length < 5) {
+      console.log(`📚 Adding Brookline Booksmith picks to fill bestseller recommendations (${recommendations.length}/5)`);
+      
+      let brooklineBooks: Book[] = [];
+      
+      if (userBooks.length > 0) {
+        // Get user's preferred genres for targeted indie bookstore recommendations
+        const userGenres = userBooks
+          .filter(book => !book.rating || book.rating >= 3)
+          .flatMap(book => book.genre);
+        
+        const genreFreq = new Map<string, number>();
+        userGenres.forEach(genre => {
+          genreFreq.set(genre, (genreFreq.get(genre) || 0) + 1);
+        });
+        
+        const topGenres = Array.from(genreFreq.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 2)
+          .map(([genre]) => genre);
+        
+        // Try to get indie bookstore picks in user's preferred genres first
+        for (const genre of topGenres) {
+          const genreBooks = getBrooklineBooksmithByGenre(genre, 2);
+          brooklineBooks.push(...genreBooks);
+        }
+      }
+      
+      // Fill remaining with staff picks and diverse voices
+      if (brooklineBooks.length < 4) {
+        const staffPicks = getBrooklineBooksmithStaffPicks(2);
+        const diverseVoices = getBrooklineBooksmithDiverseVoices(2);
+        brooklineBooks.push(...staffPicks, ...diverseVoices);
+      }
+      
+      console.log(`📖 Processing ${brooklineBooks.length} Brookline Booksmith books for bestseller fallback`);
+      
+      for (const book of brooklineBooks) {
+        if (recommendations.length >= 8) break;
+        
+        if (canAddBook(book)) {
+          addBookToTracking(book);
+          const baseScore = 80 + Math.floor(Math.random() * 15);
+          const boostedScore = boostScoreForBestsellers(book, baseScore);
+          recommendations.push({
+            ...book,
+            score: boostedScore,
+            reasons: ['Indie bookstore pick', 'Staff favorite']
+          });
+        }
+      }
+      
+      console.log(`📊 Added Brookline Booksmith books, now have ${recommendations.length} total recommendations`);
+    }
+    
     // Final deduplication for bestsellers
     const finalDeduplication = (recs: BookRecommendation[]): BookRecommendation[] => {
       const seen = new Set<string>();
-      const seenAuthors = new Set<string>();
+      const finalAuthorCount = new Map<string, number>();
       const deduplicated: BookRecommendation[] = [];
       
       for (const rec of recs) {
         const bookKey = `${normalizeTitle(rec.title)}-${normalizeAuthor(rec.author)}`;
         const authorKey = normalizeAuthor(rec.author);
+        const authorExceedsLimit = (finalAuthorCount.get(authorKey) || 0) >= 2;
         
-        if (!seen.has(bookKey) && !seenAuthors.has(authorKey)) {
+        if (!seen.has(bookKey) && !authorExceedsLimit) {
           seen.add(bookKey);
-          seenAuthors.add(authorKey);
+          finalAuthorCount.set(authorKey, (finalAuthorCount.get(authorKey) || 0) + 1);
           deduplicated.push(rec);
         }
       }
@@ -466,32 +1458,65 @@ export const getBestsellerRecommendations = async (userBooks: Book[] = []): Prom
     const deduplicatedRecs = finalDeduplication(recommendations);
     console.log(`📊 Bestsellers summary: ${recommendations.length} total, ${deduplicatedRecs.length} after dedup`);
     
-    return deduplicatedRecs.slice(0, 8);
+    // Ensure exactly 5 unique recommendations
+    const finalRecs = deduplicatedRecs.slice(0, 5);
+    console.log(`🎯 Returning ${finalRecs.length} unique bestseller recommendations`);
+    
+    return finalRecs;
   } catch (error) {
     console.error('Error getting bestseller recommendations:', error);
     return [];
   }
 };
 
-// Calculate similarity score between two books
+// Enhanced similarity score calculation based on user's book preferences
 const calculateSimilarityScore = (book: Book, referenceBook: Book): number => {
-  let score = 50; // Base score
+  let score = 40; // Base score (slightly lower to make room for better matching)
   
-  // Genre similarity
+  // Genre similarity (enhanced matching)
   const commonGenres = book.genre.filter(genre => 
     referenceBook.genre.some(refGenre => 
       refGenre.toLowerCase().includes(genre.toLowerCase()) ||
       genre.toLowerCase().includes(refGenre.toLowerCase())
     )
   );
-  score += commonGenres.length * 15;
   
-  // Rating similarity (prefer highly rated books)
-  if (book.rating >= 4.0) score += 20;
-  if (referenceBook.rating >= 4.0 && book.rating >= 3.8) score += 10;
+  // More points for exact genre matches
+  const exactGenreMatches = book.genre.filter(genre => 
+    referenceBook.genre.some(refGenre => 
+      refGenre.toLowerCase() === genre.toLowerCase()
+    )
+  );
   
-  // Random factor for variety
-  score += Math.floor(Math.random() * 10);
+  score += exactGenreMatches.length * 20; // Exact matches get more points
+  score += (commonGenres.length - exactGenreMatches.length) * 12; // Partial matches get fewer points
+  
+  // Rating-based scoring (prefer books with similar or better ratings)
+  const ratingDiff = Math.abs(book.rating - referenceBook.rating);
+  if (ratingDiff <= 0.5) score += 15; // Very similar ratings
+  else if (ratingDiff <= 1.0) score += 10; // Somewhat similar ratings
+  else if (ratingDiff <= 1.5) score += 5; // Moderate difference
+  
+  // Boost for highly rated books
+  if (book.rating >= 4.5) score += 15;
+  else if (book.rating >= 4.0) score += 10;
+  else if (book.rating >= 3.5) score += 5;
+  
+  // Year similarity (prefer books from similar time periods)
+  if (book.year && referenceBook.year) {
+    const yearDiff = Math.abs(book.year - referenceBook.year);
+    if (yearDiff <= 5) score += 8; // Very recent
+    else if (yearDiff <= 15) score += 5; // Same era
+    else if (yearDiff <= 30) score += 2; // Similar generation
+  }
+  
+  // Author similarity (same author gets a boost, but we handle this separately)
+  if (book.author.toLowerCase() === referenceBook.author.toLowerCase()) {
+    score += 25; // Significant boost for same author
+  }
+  
+  // Random factor for variety (reduced to give more weight to actual similarity)
+  score += Math.floor(Math.random() * 5);
   
   return Math.min(100, score);
 };
@@ -676,39 +1701,101 @@ export const enhanceBookWithGoogleData = async (book: Book): Promise<Book> => {
 export const getReplacementRecommendation = async (
   rejectedBook: BookRecommendation, 
   userBooks: Book[], 
-  rejectedBookIds: string[]
+  rejectedBookIds: string[],
+  currentRecommendations: BookRecommendation[] = []
 ): Promise<BookRecommendation | null> => {
   try {
     const recommendations: BookRecommendation[] = [];
     const seenBooks = new Set<string>(); // Track by ID
     const seenTitleAuthor = new Set<string>(); // Track by title-author combination
-    const seenAuthors = new Set<string>(); // Track authors to prevent duplicates
+    const authorCount = new Map<string, number>(); // Track author frequency (allow up to 2 per author)
+    
+    // Helper functions for deduplication (enhanced versions from main function)
+    const getBookKey = (book: Book) => 
+      `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
+    
+    const normalizeAuthor = (author: string) => 
+      author.toLowerCase()
+            .trim()
+            .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, ' ')
+            .replace(/\bjr\b|\bsr\b|\biii?\b|\biv\b/g, '') // Remove Jr, Sr, II, III, IV
+            .trim();
+    
+    const normalizeTitle = (title: string) =>
+      title.toLowerCase()
+           .trim()
+           .replace(/[^\w\s]/g, '')
+           .replace(/\s+/g, ' ')
+           .replace(/\b(the|a|an)\b/g, '') // Remove articles
+           .trim();
+    
+    const getEnhancedBookKey = (book: Book) => 
+      `${normalizeTitle(book.title)}-${normalizeAuthor(book.author)}`;
     
     // Add rejected book ID to seen books to avoid re-suggesting
     seenBooks.add(rejectedBook.id);
     rejectedBookIds.forEach(id => seenBooks.add(id));
     
-    // Helper functions for deduplication
-    const getBookKey = (book: Book) => 
-      `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
+    // Add current recommendations to avoid duplicates
+    currentRecommendations.forEach(rec => {
+      seenBooks.add(rec.id);
+      seenTitleAuthor.add(getBookKey(rec));
+      seenTitleAuthor.add(getEnhancedBookKey(rec));
+      
+      // Track author count from current recommendations
+      const normalizedAuthor = normalizeAuthor(rec.author);
+      const currentCount = authorCount.get(normalizedAuthor) || 0;
+      authorCount.set(normalizedAuthor, currentCount + 1);
+    });
     
-    const normalizeAuthor = (author: string) => 
-      author.toLowerCase().trim().replace(/[^\w\s]/g, '');
+    console.log(`🔄 Finding replacement for "${rejectedBook.title}" by ${rejectedBook.author}`);
+    console.log(`📝 Avoiding ${seenBooks.size} books, ${authorCount.size} authors with quotas already on page`);
     
     const canAddBook = (book: Book): boolean => {
       const bookKey = getBookKey(book);
+      const enhancedBookKey = getEnhancedBookKey(book);
       const normalizedAuthor = normalizeAuthor(book.author);
       
-      return !seenBooks.has(book.id) && 
-             !seenTitleAuthor.has(bookKey) && 
-             !seenAuthors.has(normalizedAuthor) &&
-             !isBookInUserLibrary(book, userBooks);
+      const isDuplicateId = seenBooks.has(book.id);
+      const isDuplicateBookKey = seenTitleAuthor.has(bookKey);
+      const isDuplicateEnhanced = seenTitleAuthor.has(enhancedBookKey);
+      const authorExceededLimit = (authorCount.get(normalizedAuthor) || 0) >= 2;
+      const isInLibrary = isBookInUserLibrary(book, userBooks);
+      
+      // Debug logging for replacements
+      if (isDuplicateId || isDuplicateBookKey || isDuplicateEnhanced || authorExceededLimit || isInLibrary) {
+        console.log(`🚫 Replacement blocked: "${book.title}" by ${book.author}`, {
+          isDuplicateId,
+          isDuplicateBookKey,
+          isDuplicateEnhanced,
+          authorExceededLimit,
+          currentAuthorCount: authorCount.get(normalizedAuthor) || 0,
+          isInLibrary
+        });
+      }
+      
+      return !isDuplicateId && 
+             !isDuplicateBookKey && 
+             !isDuplicateEnhanced &&
+             !authorExceededLimit &&
+             !isInLibrary;
     };
     
     const addBookToTracking = (book: Book) => {
+      const bookKey = getBookKey(book);
+      const enhancedBookKey = getEnhancedBookKey(book);
+      const normalizedAuthor = normalizeAuthor(book.author);
+      
       seenBooks.add(book.id);
-      seenTitleAuthor.add(getBookKey(book));
-      seenAuthors.add(normalizeAuthor(book.author));
+      seenTitleAuthor.add(bookKey);
+      seenTitleAuthor.add(enhancedBookKey);
+      
+      // Increment author count
+      const currentCount = authorCount.get(normalizedAuthor) || 0;
+      authorCount.set(normalizedAuthor, currentCount + 1);
+      
+      console.log(`✅ Added replacement to tracking: "${book.title}" by ${book.author} (author count: ${currentCount + 1})`);
     };
 
     // Strategy 1: Find books by the same genre as rejected book

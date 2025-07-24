@@ -24,6 +24,7 @@ export interface BookRecommendation extends Book {
   score: number;
   reasons: string[];
   similarTo?: string; // Title of the book this recommendation is similar to
+  likedAt?: string; // ISO timestamp when user liked this recommendation
 }
 
 export const getRecommendations = (

@@ -18,6 +18,22 @@ export interface Book {
   coverUrl?: string;
 }
 
+export interface WantToReadBook {
+  id: string;
+  title: string;
+  author: string;
+  genre: string[];
+  description?: string;
+  summary?: string;
+  year?: number;
+  isbn?: string;
+  tags?: BookTag[];
+  coverUrl?: string;
+  dateAdded?: string; // ISO timestamp when added to want-to-read
+  priority?: 'low' | 'medium' | 'high'; // User can set reading priority
+  notes?: string; // User notes about why they want to read it
+}
+
 export interface BookFormData {
   title: string;
   author: string;

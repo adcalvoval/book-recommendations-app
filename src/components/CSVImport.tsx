@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { parseCSV, convertGoodreadsToBooks, validateGoodreadsCSV } from '../utils/csvParser';
-import type { Book } from '../types';
+import { parseCSV, convertGoodreadsToBooks, convertGoodreadsToWantToReadBooks, validateGoodreadsCSV } from '../utils/csvParser';
+import type { Book, WantToReadBook } from '../types';
 
 interface CSVImportProps {
-  onImport: (books: Book[]) => void;
+  onImport: (books: Book[], wantToReadBooks: WantToReadBook[]) => void;
   onCancel: () => void;
 }
 
@@ -11,6 +11,7 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImport, onCancel }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewBooks, setPreviewBooks] = useState<Book[]>([]);
+  const [previewWantToReadBooks, setPreviewWantToReadBooks] = useState<WantToReadBook[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,8 +39,9 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImport, onCancel }) => {
       }
 
       const books = convertGoodreadsToBooks(csvRows);
+      const wantToReadBooks = convertGoodreadsToWantToReadBooks(csvRows);
       
-      if (books.length === 0) {
+      if (books.length === 0 && wantToReadBooks.length === 0) {
         // Count books in different states for better error message
         const totalBooks = csvRows.length;
         const toReadBooks = csvRows.filter(row => row['Exclusive Shelf']?.toLowerCase() === 'to-read').length;
@@ -49,11 +51,11 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImport, onCancel }) => {
         let errorMsg = `No books available to import from your CSV file.\n\nAnalysis of your file:\n• Total books: ${totalBooks}\n• Books marked "to-read": ${toReadBooks}\n• Books marked "read": ${readBooks}\n• Books with ratings: ${ratedBooks}\n\n`;
         
         if (toReadBooks > 0 && readBooks === 0) {
-          errorMsg += 'Your CSV only contains books from your "to-read" list. To import books, you need:\n1. Books marked as "read" (not "to-read")\n2. Books with ratings (1-5 stars)\n\nMake sure to export books you\'ve actually read and rated from Goodreads.';
+          errorMsg += 'Your CSV contains books from your "to-read" list but we couldn\'t find any books you\'ve read and rated.';
         } else if (readBooks > 0 && ratedBooks === 0) {
           errorMsg += 'You have books marked as "read" but none have ratings. Please rate your books on Goodreads first, then export again.';
         } else {
-          errorMsg += 'Make sure you have books that are both marked as "read" AND have ratings (1-5 stars) in Goodreads.';
+          errorMsg += 'Make sure you have books in your Goodreads library.';
         }
         
         setError(errorMsg);
@@ -62,6 +64,7 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImport, onCancel }) => {
       }
 
       setPreviewBooks(books);
+      setPreviewWantToReadBooks(wantToReadBooks);
       setShowPreview(true);
     } catch (err) {
       setError('Error processing CSV file. Please make sure it\'s a valid Goodreads export.');
@@ -72,14 +75,16 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImport, onCancel }) => {
   };
 
   const handleConfirmImport = () => {
-    onImport(previewBooks);
+    onImport(previewBooks, previewWantToReadBooks);
     setShowPreview(false);
     setPreviewBooks([]);
+    setPreviewWantToReadBooks([]);
   };
 
   const handleCancel = () => {
     setShowPreview(false);
     setPreviewBooks([]);
+    setPreviewWantToReadBooks([]);
     setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -96,35 +101,71 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImport, onCancel }) => {
       <div className="csv-import">
         <div className="import-header">
           <h3>Import Preview</h3>
-          <p>Found {previewBooks.length} books to import. Review and confirm:</p>
+          <p>
+            Found {previewBooks.length} read books and {previewWantToReadBooks.length} want-to-read books to import. Review and confirm:
+          </p>
         </div>
 
-        <div className="preview-books">
-          {previewBooks.slice(0, 10).map((book, index) => (
-            <div key={index} className="preview-book">
-              <h4>{book.title}</h4>
-              <p className="book-author">by {book.author}</p>
-              <div className="book-genres">
-                {book.genre.map(genre => (
-                  <span key={genre} className="genre-tag">{genre}</span>
-                ))}
-              </div>
-              <div className="book-rating">
-                <span className="stars">{renderStars(book.rating)}</span>
-                <span className="rating-number">({book.rating}/5)</span>
-              </div>
+        {previewBooks.length > 0 && (
+          <div className="preview-section">
+            <h4>📚 Read Books ({previewBooks.length})</h4>
+            <div className="preview-books">
+              {previewBooks.slice(0, 5).map((book, index) => (
+                <div key={index} className="preview-book">
+                  <h5>{book.title}</h5>
+                  <p className="book-author">by {book.author}</p>
+                  <div className="book-genres">
+                    {book.genre.map(genre => (
+                      <span key={genre} className="genre-tag">{genre}</span>
+                    ))}
+                  </div>
+                  <div className="book-rating">
+                    <span className="stars">{renderStars(book.rating)}</span>
+                    <span className="rating-number">({book.rating}/5)</span>
+                  </div>
+                </div>
+              ))}
+              {previewBooks.length > 5 && (
+                <div className="preview-more">
+                  <p>... and {previewBooks.length - 5} more read books</p>
+                </div>
+              )}
             </div>
-          ))}
-          {previewBooks.length > 10 && (
-            <div className="preview-more">
-              <p>... and {previewBooks.length - 10} more books</p>
+          </div>
+        )}
+
+        {previewWantToReadBooks.length > 0 && (
+          <div className="preview-section">
+            <h4>📖 Want to Read ({previewWantToReadBooks.length})</h4>
+            <div className="preview-books">
+              {previewWantToReadBooks.slice(0, 5).map((book, index) => (
+                <div key={index} className="preview-book">
+                  <h5>{book.title}</h5>
+                  <p className="book-author">by {book.author}</p>
+                  <div className="book-genres">
+                    {book.genre.map(genre => (
+                      <span key={genre} className="genre-tag">{genre}</span>
+                    ))}
+                  </div>
+                  {book.notes && (
+                    <div className="book-notes">
+                      <small>Note: {book.notes.substring(0, 100)}{book.notes.length > 100 ? '...' : ''}</small>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {previewWantToReadBooks.length > 5 && (
+                <div className="preview-more">
+                  <p>... and {previewWantToReadBooks.length - 5} more want-to-read books</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="import-actions">
           <button onClick={handleConfirmImport} className="btn btn-primary">
-            Import {previewBooks.length} Books
+            Import {previewBooks.length + previewWantToReadBooks.length} Books
           </button>
           <button onClick={handleCancel} className="btn btn-secondary">
             Cancel
@@ -138,7 +179,7 @@ const CSVImport: React.FC<CSVImportProps> = ({ onImport, onCancel }) => {
     <div className="csv-import">
       <div className="import-header">
         <h3>Import from Goodreads</h3>
-        <p>Upload your Goodreads library export to import all your rated books.</p>
+        <p>Upload your Goodreads library export to import your read books and want-to-read list.</p>
       </div>
 
       <div className="import-instructions">
