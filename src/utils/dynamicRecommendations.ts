@@ -131,8 +131,14 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
       seenTitleAuthor.add(bookKey);
       seenTitleAuthor.add(enhancedBookKey);
       
+      // Also block this exact title-author combination to prevent duplicates across sources
+      const titleAuthorBlock = `${book.title.toLowerCase().trim()}-${book.author.toLowerCase().trim()}`;
+      seenTitleAuthor.add(titleAuthorBlock);
+      
       const currentCount = authorCount.get(normalizedAuthor) || 0;
       authorCount.set(normalizedAuthor, currentCount + 1);
+      
+      console.log(`✅ Added to tracking: "${book.title}" by ${book.author} (Author count: ${currentCount + 1})`);
     };
 
     // STRATEGY 1: Use Google Books API for similarity-based recommendations (if user has books)
@@ -185,8 +191,12 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
     }
 
     // STRATEGY 2: Add from ALL curated sources equally
-    const targetFromEachSource = Math.max(1, Math.floor((5 - recommendations.length) / 4));
-    console.log(`🎯 Strategy 2 Setup: Need ${5 - recommendations.length} more books, targeting ${targetFromEachSource} from each of 4 sources`);
+    // Force at least 1 book per source, but allow more if needed
+    const remainingSlots = 5 - recommendations.length;
+    const targetFromEachSource = Math.max(1, Math.floor(remainingSlots / 4));
+    const bonusSlots = remainingSlots % 4; // Distribute remaining slots
+    
+    console.log(`🎯 Strategy 2 Setup: Need ${remainingSlots} more books, targeting ${targetFromEachSource} from each source (${bonusSlots} bonus slots)`);
     console.log(`👤 User library analysis: ${userBooks.length} books in library:`, userBooks.map(b => `"${b.title}" by ${b.author} (${b.rating || 'unrated'})`));
     
     // A. Best 21st Century Books
@@ -196,8 +206,9 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
     const shuffled21st = best21stBooks.sort(() => Math.random() - 0.5);
     console.log(`🔍 DEBUG: Found ${shuffled21st.length} 21st century books:`, shuffled21st.slice(0, 5).map(b => `"${b.title}" by ${b.author}`));
     let added21st = 0;
+    const max21st = targetFromEachSource + (bonusSlots > 0 ? 1 : 0); // Give first source bonus slot if available
     for (const book of shuffled21st) {
-      if (added21st >= targetFromEachSource || recommendations.length >= 5) break;
+      if (added21st >= max21st) break;
       console.log(`🔍 Checking 21st century book: "${book.title}" by ${book.author}`);
       if (canAddBook(book)) {
         addBookToTracking(book);
@@ -207,7 +218,7 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
           reasons: ['Acclaimed 21st century literature', 'Highly rated']
         });
         added21st++;
-        console.log(`✅ Added 21st century book: "${book.title}" (${added21st}/${targetFromEachSource})`);
+        console.log(`✅ Added 21st century book: "${book.title}" (${added21st}/${max21st})`);
       }
     }
     
@@ -218,8 +229,9 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
     const shuffledGoodreads = goodreadsBooks.sort(() => Math.random() - 0.5);
     console.log(`🔍 DEBUG: Found ${shuffledGoodreads.length} Goodreads books with 4.0+ rating:`, shuffledGoodreads.slice(0, 5).map(b => `"${b.title}" by ${b.author} (${b.rating})`));
     let addedGoodreads = 0;
+    const maxGoodreads = targetFromEachSource + (bonusSlots > 1 ? 1 : 0); // Give second source bonus slot if available
     for (const book of shuffledGoodreads) {
-      if (addedGoodreads >= targetFromEachSource || recommendations.length >= 5) break;
+      if (addedGoodreads >= maxGoodreads) break;
       console.log(`🔍 Checking Goodreads book: "${book.title}" by ${book.author}`);
       if (canAddBook(book)) {
         addBookToTracking(book);
@@ -229,7 +241,7 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
           reasons: ['Goodreads Best Books Ever', 'Beloved by readers']
         });
         addedGoodreads++;
-        console.log(`✅ Added Goodreads book: "${book.title}" (${addedGoodreads}/${targetFromEachSource})`);
+        console.log(`✅ Added Goodreads book: "${book.title}" (${addedGoodreads}/${maxGoodreads})`);
       } else {
         console.log(`❌ Rejected Goodreads book: "${book.title}" (already added or in library)`);
       }
@@ -242,8 +254,9 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
     const shuffledNewYorker = newYorkerBooks.sort(() => Math.random() - 0.5);
     console.log(`🔍 DEBUG: Found ${shuffledNewYorker.length} New Yorker books:`, shuffledNewYorker.slice(0, 5).map(b => `"${b.title}" by ${b.author}`));
     let addedNewYorker = 0;
+    const maxNewYorker = targetFromEachSource + (bonusSlots > 2 ? 1 : 0); // Give third source bonus slot if available
     for (const book of shuffledNewYorker) {
-      if (addedNewYorker >= targetFromEachSource || recommendations.length >= 5) break;
+      if (addedNewYorker >= maxNewYorker) break;
       console.log(`🔍 Checking New Yorker book: "${book.title}" by ${book.author}`);
       if (canAddBook(book)) {
         addBookToTracking(book);
@@ -253,7 +266,7 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
           reasons: ['Award winner', 'Literary excellence']
         });
         addedNewYorker++;
-        console.log(`✅ Added New Yorker book: "${book.title}" (${addedNewYorker}/${targetFromEachSource})`);
+        console.log(`✅ Added New Yorker book: "${book.title}" (${addedNewYorker}/${maxNewYorker})`);
       } else {
         console.log(`❌ Rejected New Yorker book: "${book.title}" (already added or in library)`);
       }
@@ -266,8 +279,9 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
     const shuffledBrookline = brooklineBooks.sort(() => Math.random() - 0.5);
     console.log(`🔍 DEBUG: Found ${shuffledBrookline.length} Brookline books:`, shuffledBrookline.slice(0, 5).map(b => `"${b.title}" by ${b.author}`));
     let addedBrookline = 0;
+    const maxBrookline = targetFromEachSource + (bonusSlots > 3 ? 1 : 0); // Give fourth source bonus slot if available
     for (const book of shuffledBrookline) {
-      if (addedBrookline >= targetFromEachSource || recommendations.length >= 5) break;
+      if (addedBrookline >= maxBrookline) break;
       console.log(`🔍 Checking Brookline book: "${book.title}" by ${book.author}`);
       if (canAddBook(book)) {
         addBookToTracking(book);
@@ -277,34 +291,44 @@ export const getDynamicRecommendations = async (userBooks: Book[], excludeShownI
           reasons: ['Indie bookstore favorite', 'Staff pick']
         });
         addedBrookline++;
-        console.log(`✅ Added Brookline book: "${book.title}" (${addedBrookline}/${targetFromEachSource})`);
+        console.log(`✅ Added Brookline book: "${book.title}" (${addedBrookline}/${maxBrookline})`);
       } else {
         console.log(`❌ Rejected Brookline book: "${book.title}" (already added or in library)`);
       }
     }
     
-    console.log(`📊 Strategy 2 Complete: Added ${added21st} 21st Century, ${addedGoodreads} Goodreads, ${addedNewYorker} New Yorker, ${addedBrookline} Brookline books`);
+    console.log(`📊 Strategy 2 Complete: Added ${added21st} 21st Century, ${addedGoodreads} Goodreads, ${addedNewYorker} New Yorker, ${addedBrookline} Brookline books (Total: ${recommendations.length})`);
     
-    // STRATEGY 3: Fill remaining slots if needed
-    if (recommendations.length < 5) {
-      console.log(`🔄 Strategy 3: Filling remaining slots (${recommendations.length}/5)`);
+    // Debug: Show what we have so far
+    console.log(`📋 Current recommendations:`, recommendations.map(r => `"${r.title}" by ${r.author} (${r.score})`));
+    
+    // STRATEGY 3: Emergency fill if we don't have enough books
+    if (recommendations.length < 3) {
+      console.log(`🚨 Strategy 3: Emergency fill - only ${recommendations.length} books so far, need at least 3`);
       
-      // Try more from any source
-      const allCuratedBooks = [
-        ...getRandomGoodreadsBestBooks(3),
-        ...getRecentNewYorkerBooks(4.0, 3),
-        ...getHighRatedBrooklineBooksmith(4.0, 3)
+      // Get more books from all sources and shuffle them together
+      const emergencyBooks = [
+        ...getRandomGoodreadsBestBooks(5),
+        ...getRecentNewYorkerBooks(3.8, 5),
+        ...getHighRatedBrooklineBooksmith(3.8, 5),
+        ...getAwardWinningBest21stCentury(5)
       ];
       
-      for (const book of allCuratedBooks) {
+      // Shuffle the emergency books for variety
+      const shuffledEmergency = emergencyBooks.sort(() => Math.random() - 0.5);
+      console.log(`🔍 Emergency pool: ${shuffledEmergency.length} books available`);
+      
+      for (const book of shuffledEmergency) {
         if (recommendations.length >= 5) break;
+        console.log(`🔍 Checking emergency book: "${book.title}" by ${book.author}`);
         if (canAddBook(book)) {
           addBookToTracking(book);
           recommendations.push({
             ...book,
-            score: 75 + Math.floor(Math.random() * 15),
-            reasons: ['Curated recommendation', 'High quality']
+            score: 70 + Math.floor(Math.random() * 20),
+            reasons: ['High quality pick', 'Popular choice']
           });
+          console.log(`✅ Added emergency book: "${book.title}" (Total: ${recommendations.length})`);
         }
       }
     }
