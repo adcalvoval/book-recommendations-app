@@ -125,7 +125,13 @@ function App() {
 
   // Refresh covers for all library books
   const handleRefreshCovers = async () => {
-    if (books.length === 0) return;
+    console.log('🎯 Refresh covers button clicked!', { booksCount: books.length });
+    
+    if (books.length === 0) {
+      console.log('❌ No books to refresh covers for');
+      alert('No books in library to refresh covers for');
+      return;
+    }
     
     setIsRefreshingCovers(true);
     console.log('🔄 Starting cover refresh for library books...');
@@ -133,23 +139,33 @@ function App() {
     try {
       // Use the enhanced cover fetching system
       const newCoverMap = await refreshMultipleBookCovers(books);
+      console.log('📊 Cover refresh results:', { 
+        foundCovers: newCoverMap.size,
+        totalBooks: books.length
+      });
       
       if (newCoverMap.size > 0) {
+        let updatedCount = 0;
         // Update books with new covers
         books.forEach(book => {
           const newCoverUrl = newCoverMap.get(book.id);
           if (newCoverUrl && newCoverUrl !== book.coverUrl) {
+            console.log(`📝 Updating cover for: ${book.title}`);
             const updatedBook = { ...book, coverUrl: newCoverUrl };
             handleBookUpdate(updatedBook);
+            updatedCount++;
           }
         });
         
-        console.log(`✅ Updated ${newCoverMap.size} book covers in library`);
+        console.log(`✅ Updated ${updatedCount} book covers in library`);
+        alert(`Updated ${updatedCount} book covers!`);
       } else {
         console.log('ℹ️ No cover improvements found');
+        alert('No improved covers found for your books');
       }
     } catch (error) {
       console.error('❌ Error refreshing covers:', error);
+      alert('Error refreshing covers. Check console for details.');
     } finally {
       setIsRefreshingCovers(false);
     }
