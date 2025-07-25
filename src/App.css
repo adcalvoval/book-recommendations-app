@@ -2760,7 +2760,7 @@
 }
 
 /* Responsive sort filter */
-@media (max-width: 768px) {
+@media (max-width: 600px) {
   .sort-header {
     flex-direction: column;
     gap: 1rem;
@@ -2771,6 +2771,7 @@
   .filter-controls {
     flex-wrap: wrap;
     gap: 1rem;
+    justify-content: space-between;
   }
   
   .search-controls {
@@ -2792,6 +2793,19 @@
   .sort-select {
     min-width: auto;
     flex: 1;
+  }
+}
+
+/* Ensure inline layout for larger screens */
+@media (min-width: 601px) {
+  .sort-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  
+  .filter-controls {
+    flex-wrap: nowrap;
   }
 }
 
