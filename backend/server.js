@@ -8,12 +8,14 @@ const PORT = process.env.PORT || 3001;
 
 // Initialize Claude client
 const anthropic = new Anthropic({
-  apiKey: process.env.CLAUDE_API_KEY,
+  apiKey: process.env.CLAUDE_API_KEY || process.env.VITE_CLAUDE_API_KEY,
 });
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177', 'http://localhost:5178', 'http://localhost:5179', 'http://localhost:5180', 'http://localhost:5181', 'http://localhost:5182', 'http://localhost:5183', 'http://localhost:5184'], // Allow your frontend
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://book-recommendations-app.vercel.app', 'https://book-recommendations-app-git-main-adcalvoval.vercel.app']
+    : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177', 'http://localhost:5178', 'http://localhost:5179', 'http://localhost:5180', 'http://localhost:5181', 'http://localhost:5182', 'http://localhost:5183', 'http://localhost:5184'],
   credentials: true
 }));
 app.use(express.json());
@@ -141,7 +143,13 @@ Focus on variety, quality, and relevance to their request. Only return the JSON 
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(`📚 Book recommendations API available at http://localhost:${PORT}/api/recommendations`);
-});
+// Export the Express app for Vercel
+module.exports = app;
+
+// Only listen when running locally (not in Vercel)
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Backend server running on http://localhost:${PORT}`);
+    console.log(`📚 Book recommendations API available at http://localhost:${PORT}/api/recommendations`);
+  });
+}

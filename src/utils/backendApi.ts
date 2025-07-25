@@ -14,7 +14,9 @@ interface BackendBookRecommendation {
   reasons: string[];
 }
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.PROD 
+  ? '' // Use relative URLs in production (same domain)
+  : 'http://localhost:3001';
 
 export const getBackendRecommendations = async (query: string, userBooks: Book[]): Promise<BackendBookRecommendation[]> => {
   try {
