@@ -2664,7 +2664,6 @@
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  flex-wrap: wrap;
 }
 
 .search-controls {
@@ -2768,13 +2767,13 @@
   }
   
   .filter-controls {
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 1rem;
-    align-items: stretch;
   }
   
   .search-controls {
-    justify-content: space-between;
+    flex: 1;
+    min-width: 200px;
   }
   
   .search-input {
@@ -2783,7 +2782,9 @@
   }
   
   .sort-controls {
-    justify-content: space-between;
+    flex: 1;
+    min-width: 200px;
+    justify-content: flex-end;
   }
   
   .sort-select {
