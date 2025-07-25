@@ -13,6 +13,7 @@ interface BookListProps {
 }
 
 const SORT_PREFERENCE_KEY = 'book-sort-preference';
+const SEARCH_PREFERENCE_KEY = 'book-search-query';
 
 const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }) => {
   // Load sort preference from localStorage, default to 'title-asc'
@@ -21,10 +22,21 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
     return (saved as SortOption) || 'title-asc';
   });
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    const saved = localStorage.getItem(SEARCH_PREFERENCE_KEY);
+    return saved || '';
+  });
+
   // Save sort preference to localStorage when it changes
   useEffect(() => {
     localStorage.setItem(SORT_PREFERENCE_KEY, sortBy);
   }, [sortBy]);
+
+  // Save search query to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem(SEARCH_PREFERENCE_KEY, searchQuery);
+  }, [searchQuery]);
 
   // Sorting function
   const sortBooks = (books: Book[], sortOption: SortOption): Book[] => {
@@ -72,8 +84,20 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
     }
   };
 
-  // Memoized sorted books
-  const sortedBooks = useMemo(() => sortBooks(books, sortBy), [books, sortBy]);
+  // Search filtering function
+  const filterBooks = (books: Book[], query: string): Book[] => {
+    if (!query.trim()) return books;
+    
+    const searchTerm = query.toLowerCase().trim();
+    return books.filter(book => 
+      book.title.toLowerCase().includes(searchTerm) ||
+      book.author.toLowerCase().includes(searchTerm)
+    );
+  };
+
+  // Memoized filtered and sorted books
+  const filteredBooks = useMemo(() => filterBooks(books, searchQuery), [books, searchQuery]);
+  const sortedBooks = useMemo(() => sortBooks(filteredBooks, sortBy), [filteredBooks, sortBy]);
 
   if (books.length === 0) {
     return (
@@ -119,7 +143,10 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
       <BookSortFilter 
         sortBy={sortBy} 
         onSortChange={setSortBy} 
-        bookCount={books.length} 
+        bookCount={books.length}
+        filteredCount={filteredBooks.length}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
       />
       <div className="books-grid">
         {sortedBooks.map(book => (
