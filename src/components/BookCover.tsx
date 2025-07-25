@@ -7,19 +7,28 @@ interface BookCoverProps {
   size?: 'small' | 'medium' | 'large';
   className?: string;
   onClick?: () => void;
+  customCoverUrl?: string;
 }
 
 const BookCover: React.FC<BookCoverProps> = ({ 
   book, 
   size = 'medium', 
   className = '', 
-  onClick 
+  onClick,
+  customCoverUrl
 }) => {
-  const [coverUrl, setCoverUrl] = useState<string | null>(book.coverUrl || null);
-  const [isLoading, setIsLoading] = useState(!book.coverUrl);
+  const [coverUrl, setCoverUrl] = useState<string | null>(customCoverUrl || book.coverUrl || null);
+  const [isLoading, setIsLoading] = useState(!(customCoverUrl || book.coverUrl));
   const [, setHasError] = useState(false);
 
   useEffect(() => {
+    // If custom cover URL is provided, use it
+    if (customCoverUrl) {
+      setCoverUrl(customCoverUrl);
+      setIsLoading(false);
+      return;
+    }
+    
     if (!book.coverUrl) {
       fetchBookCover(book)
         .then(url => {
@@ -34,7 +43,7 @@ const BookCover: React.FC<BookCoverProps> = ({
           setHasError(true);
         });
     }
-  }, [book]);
+  }, [book, customCoverUrl]);
 
   const handleImageError = () => {
     setHasError(true);
