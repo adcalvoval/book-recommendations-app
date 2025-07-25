@@ -1,17 +1,7 @@
 {
   "functions": {
-    "backend/server.js": {
+    "api/*.js": {
       "runtime": "@vercel/node"
     }
-  },
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/backend/server.js"
-    },
-    {
-      "source": "/health",
-      "destination": "/backend/server.js"
-    }
-  ]
+  }
 }
