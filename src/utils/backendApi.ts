@@ -58,7 +58,11 @@ export const getBackendRecommendations = async (query: string, userBooks: Book[]
 // Check if backend is running
 export const checkBackendHealth = async (): Promise<boolean> => {
   try {
-    const response = await fetch(`${BACKEND_URL}/health`, {
+    const healthUrl = import.meta.env.PROD 
+      ? '/api/health'  // Use Vercel API endpoint in production
+      : `${BACKEND_URL}/health`;  // Use Express server endpoint in development
+    
+    const response = await fetch(healthUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
