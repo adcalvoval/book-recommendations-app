@@ -42,7 +42,6 @@ const RatingModal: React.FC<RatingModalProps> = ({
     const stars = [];
     for (let i = 0.5; i <= 5; i += 0.5) {
       const isHalf = i % 1 !== 0;
-      const fullStarValue = Math.floor(i);
       const displayValue = hoveredRating || rating;
       
       let filled = false;

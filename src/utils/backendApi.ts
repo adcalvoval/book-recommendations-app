@@ -9,6 +9,7 @@ interface BackendBookRecommendation {
   genre: string[];
   rating: number;
   year?: number;
+  coverUrl?: string;
   score: number;
   reasons: string[];
 }

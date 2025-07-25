@@ -48,10 +48,16 @@ function App() {
     const updatedBooks = [...books, newBook];
     setBooks(updatedBooks);
     storage.addBook(newBook);
-    setShowForm(false);
+  };
+
+  // Function for SearchBar to add books directly (already converted from BookFormData)
+  const handleAddBookFromSearch = (book: Book) => {
+    const updatedBooks = [...books, book];
+    setBooks(updatedBooks);
+    storage.addBook(book);
     
     // Fetch summary in the background
-    fetchBookSummary(newBook).then(bookWithSummary => {
+    fetchBookSummary(book).then(bookWithSummary => {
       if (bookWithSummary.summary) {
         setBooks(currentBooks => 
           currentBooks.map(book => 
@@ -137,7 +143,7 @@ function App() {
       </header>
 
       <div className="search-section">
-        <SearchBar userBooks={books} onAddBook={handleAddBook} />
+        <SearchBar userBooks={books} onAddBook={handleAddBookFromSearch} />
       </div>
 
       <main className="app-main">
