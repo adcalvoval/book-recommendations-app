@@ -170,16 +170,14 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
         });
         
         // Update books with new covers
-        const updatedBooks = books.map(book => {
+        books.forEach(book => {
           const newCoverUrl = newCoverMap.get(book.id);
           if (newCoverUrl && newCoverUrl !== book.coverUrl) {
             const updatedBook = { ...book, coverUrl: newCoverUrl };
             if (onBookUpdate) {
               onBookUpdate(updatedBook);
             }
-            return updatedBook;
           }
-          return book;
         });
         
         console.log(`✅ Updated ${newCoverMap.size} book covers in library`);
