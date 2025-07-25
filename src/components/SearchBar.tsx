@@ -113,7 +113,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ userBooks, onAddBook }) => {
         author: book.author,
         genre: [], // SearchBar doesn't have genre info
         year: book.year,
-        rating: book.rating,
+        rating: book.rating || 0, // Default to 0 if no rating
         coverUrl: book.coverUrl,
         summary: book.summary,
         description: '',

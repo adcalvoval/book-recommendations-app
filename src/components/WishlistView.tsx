@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { storage } from '../utils/storage';
-import { fetchBookCover, refreshMultipleBookCovers } from '../utils/bookCovers';
+import { refreshMultipleBookCovers } from '../utils/bookCovers';
 import type { WishlistItem, Book } from '../types';
 
 const WishlistView: React.FC = () => {
@@ -19,7 +19,7 @@ const WishlistView: React.FC = () => {
     author: item.author,
     genre: item.genre || [],
     year: item.year,
-    rating: item.rating,
+    rating: item.rating || 0, // Default to 0 if no rating
     coverUrl: item.coverUrl,
     summary: item.summary,
     description: '',
