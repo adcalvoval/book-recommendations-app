@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { Book } from '../types';
 import EditableText from './EditableText';
 import EditableTags from './EditableTags';
 import BookCover from './BookCover';
 import StarRating from './StarRating';
+import BookSortFilter, { type SortOption } from './BookSortFilter';
 
 interface BookListProps {
   books: Book[];
@@ -11,7 +12,68 @@ interface BookListProps {
   onBookUpdate?: (book: Book) => void;
 }
 
+const SORT_PREFERENCE_KEY = 'book-sort-preference';
+
 const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }) => {
+  // Load sort preference from localStorage, default to 'title-asc'
+  const [sortBy, setSortBy] = useState<SortOption>(() => {
+    const saved = localStorage.getItem(SORT_PREFERENCE_KEY);
+    return (saved as SortOption) || 'title-asc';
+  });
+
+  // Save sort preference to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem(SORT_PREFERENCE_KEY, sortBy);
+  }, [sortBy]);
+
+  // Sorting function
+  const sortBooks = (books: Book[], sortOption: SortOption): Book[] => {
+    const booksCopy = [...books];
+    
+    switch (sortOption) {
+      case 'title-asc':
+        return booksCopy.sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
+      case 'title-desc':
+        return booksCopy.sort((a, b) => b.title.toLowerCase().localeCompare(a.title.toLowerCase()));
+      case 'year-asc':
+        return booksCopy.sort((a, b) => {
+          const yearA = a.year || 0;
+          const yearB = b.year || 0;
+          if (yearA === yearB) return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+          return yearA - yearB;
+        });
+      case 'year-desc':
+        return booksCopy.sort((a, b) => {
+          const yearA = a.year || 0;
+          const yearB = b.year || 0;
+          if (yearA === yearB) return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+          return yearB - yearA;
+        });
+      case 'rating-asc':
+        return booksCopy.sort((a, b) => {
+          const ratingA = a.rating || 0;
+          const ratingB = b.rating || 0;
+          if (ratingA === ratingB) return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+          return ratingA - ratingB;
+        });
+      case 'rating-desc':
+        return booksCopy.sort((a, b) => {
+          const ratingA = a.rating || 0;
+          const ratingB = b.rating || 0;
+          if (ratingA === ratingB) return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+          return ratingB - ratingA;
+        });
+      case 'added-asc':
+        return booksCopy.sort((a, b) => a.id.localeCompare(b.id));
+      case 'added-desc':
+        return booksCopy.sort((a, b) => b.id.localeCompare(a.id));
+      default:
+        return booksCopy;
+    }
+  };
+
+  // Memoized sorted books
+  const sortedBooks = useMemo(() => sortBooks(books, sortBy), [books, sortBy]);
 
   if (books.length === 0) {
     return (
@@ -54,9 +116,13 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
 
   return (
     <div className="book-list">
-      <h3>Your Books ({books.length})</h3>
+      <BookSortFilter 
+        sortBy={sortBy} 
+        onSortChange={setSortBy} 
+        bookCount={books.length} 
+      />
       <div className="books-grid">
-        {books.map(book => (
+        {sortedBooks.map(book => (
           <div key={book.id} className="book-card">
             <BookCover book={book} size="medium" />
             <div className="book-content">
