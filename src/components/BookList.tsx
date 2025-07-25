@@ -209,18 +209,17 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
-      {books.length > 0 && (
-        <div className="book-list-actions">
-          <button
-            onClick={handleRefreshCovers}
-            disabled={isRefreshingCovers}
-            className="btn btn-secondary"
-            title="Improve book cover accuracy using enhanced search"
-          >
-            {isRefreshingCovers ? '🔄 Refreshing...' : '🖼️ Refresh Covers'}
-          </button>
-        </div>
-      )}
+      <div className="book-list-actions">
+        <button
+          onClick={handleRefreshCovers}
+          disabled={isRefreshingCovers || books.length === 0}
+          className="btn btn-secondary"
+          title="Improve book cover accuracy using enhanced search"
+          style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', margin: '10px 0' }}
+        >
+          {isRefreshingCovers ? '🔄 Refreshing...' : `🖼️ Refresh Covers (${books.length} books)`}
+        </button>
+      </div>
       <div className="books-grid">
         {sortedBooks.map(book => (
           <div key={book.id} className="book-card">
