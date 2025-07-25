@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { getClaudeRecommendations } from '../utils/claudeRecommendations';
 import { getBackendRecommendations, checkBackendHealth } from '../utils/backendApi';
 import { storage } from '../utils/storage';
+import { fetchBookCover } from '../utils/bookCovers';
 import RatingModal from './RatingModal';
 import type { Book, WishlistItem } from '../types';
 
@@ -103,21 +104,64 @@ const SearchBar: React.FC<SearchBarProps> = ({ userBooks, onAddBook }) => {
   };
 
 
-  const handleAddToWishlist = (book: BookRecommendation) => {
-    const wishlistItem: WishlistItem = {
-      id: book.id,
-      title: book.title,
-      author: book.author,
-      summary: book.summary,
-      year: book.year,
-      coverUrl: book.coverUrl,
-      rating: book.rating,
-      dateAdded: new Date().toISOString(),
-      source: 'search'
-    };
+  const handleAddToWishlist = async (book: BookRecommendation) => {
+    try {
+      // Convert BookRecommendation to Book format for enhanced cover fetching
+      const bookForCoverFetch: Book = {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        genre: [], // SearchBar doesn't have genre info
+        year: book.year,
+        rating: book.rating,
+        coverUrl: book.coverUrl,
+        summary: book.summary,
+        description: '',
+        tags: []
+      };
 
-    storage.addToWishlist(wishlistItem);
-    setAddedToWishlist(prev => new Set([...prev, book.id]));
+      // Fetch enhanced cover if current cover seems unreliable or missing
+      let enhancedCoverUrl = book.coverUrl;
+      if (!book.coverUrl || book.coverUrl.includes('placeholder') || book.coverUrl.includes('via.placeholder')) {
+        console.log(`🔍 Fetching enhanced cover for "${book.title}" by ${book.author}...`);
+        const fetchedCover = await fetchBookCover(bookForCoverFetch);
+        if (fetchedCover && fetchedCover !== enhancedCoverUrl) {
+          enhancedCoverUrl = fetchedCover;
+          console.log(`✅ Found enhanced cover for "${book.title}"`);
+        }
+      }
+
+      const wishlistItem: WishlistItem = {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        summary: book.summary,
+        year: book.year,
+        coverUrl: enhancedCoverUrl,
+        rating: book.rating,
+        dateAdded: new Date().toISOString(),
+        source: 'search'
+      };
+
+      storage.addToWishlist(wishlistItem);
+      setAddedToWishlist(prev => new Set([...prev, book.id]));
+    } catch (error) {
+      console.warn('Error enhancing cover for wishlist item:', error);
+      // Fallback to original behavior
+      const wishlistItem: WishlistItem = {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        summary: book.summary,
+        year: book.year,
+        coverUrl: book.coverUrl,
+        rating: book.rating,
+        dateAdded: new Date().toISOString(),
+        source: 'search'
+      };
+      storage.addToWishlist(wishlistItem);
+      setAddedToWishlist(prev => new Set([...prev, book.id]));
+    }
   };
 
   const handleAddToLibrary = (book: BookRecommendation) => {

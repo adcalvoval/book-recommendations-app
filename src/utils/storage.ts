@@ -72,6 +72,15 @@ export const storage = {
     storage.saveWishlist(wishlist);
   },
 
+  updateWishlistItem: (updatedItem: WishlistItem): void => {
+    const wishlist = storage.getWishlist();
+    const index = wishlist.findIndex(item => item.id === updatedItem.id);
+    if (index !== -1) {
+      wishlist[index] = updatedItem;
+      storage.saveWishlist(wishlist);
+    }
+  },
+
   clearWishlist: (): void => {
     try {
       localStorage.removeItem(WISHLIST_STORAGE_KEY);

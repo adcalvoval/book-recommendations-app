@@ -1,13 +1,84 @@
 import React, { useState, useEffect } from 'react';
 import { storage } from '../utils/storage';
-import type { WishlistItem } from '../types';
+import { fetchBookCover, refreshMultipleBookCovers } from '../utils/bookCovers';
+import type { WishlistItem, Book } from '../types';
 
 const WishlistView: React.FC = () => {
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
+  const [isRefreshingCovers, setIsRefreshingCovers] = useState(false);
+  const [coverUrls, setCoverUrls] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     setWishlist(storage.getWishlist());
   }, []);
+
+  // Convert WishlistItem to Book for cover fetching
+  const wishlistItemToBook = (item: WishlistItem): Book => ({
+    id: item.id,
+    title: item.title,
+    author: item.author,
+    genre: item.genre || [],
+    year: item.year,
+    rating: item.rating,
+    coverUrl: item.coverUrl,
+    summary: item.summary,
+    description: '',
+    tags: []
+  });
+
+  // Refresh covers for all wishlist books
+  const handleRefreshCovers = async () => {
+    if (wishlist.length === 0) return;
+    
+    setIsRefreshingCovers(true);
+    console.log('🔄 Starting cover refresh for wishlist books...');
+    
+    try {
+      // Convert wishlist items to books for cover fetching
+      const booksForCoverFetch = wishlist.map(wishlistItemToBook);
+      
+      // Use the enhanced cover fetching system
+      const newCoverMap = await refreshMultipleBookCovers(booksForCoverFetch);
+      
+      if (newCoverMap.size > 0) {
+        // Update the local cover URLs state
+        setCoverUrls(prev => {
+          const updated = new Map(prev);
+          newCoverMap.forEach((url, id) => {
+            updated.set(id, url);
+          });
+          return updated;
+        });
+        
+        // Update wishlist items with new covers
+        const updatedWishlist = wishlist.map(item => {
+          const newCoverUrl = newCoverMap.get(item.id);
+          if (newCoverUrl && newCoverUrl !== item.coverUrl) {
+            const updatedItem = { ...item, coverUrl: newCoverUrl };
+            storage.updateWishlistItem(updatedItem);
+            return updatedItem;
+          }
+          return item;
+        });
+        
+        setWishlist(updatedWishlist);
+        console.log(`✅ Updated ${newCoverMap.size} book covers in wishlist`);
+      } else {
+        console.log('ℹ️ No cover improvements found');
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing covers:', error);
+    } finally {
+      setIsRefreshingCovers(false);
+    }
+  };
+
+  // Get the best available cover URL for an item
+  const getCoverUrl = (item: WishlistItem): string => {
+    // Use enhanced cover if available, otherwise fall back to original
+    const enhancedCover = coverUrls.get(item.id);
+    return enhancedCover || item.coverUrl || 'https://via.placeholder.com/80x120/cccccc/666666?text=No+Cover';
+  };
 
   const handleRemoveFromWishlist = (id: string) => {
     storage.removeFromWishlist(id);
@@ -43,12 +114,22 @@ const WishlistView: React.FC = () => {
     <div className="wishlist-view">
       <div className="wishlist-header">
         <h2>📋 My Wishlist ({wishlist.length} books)</h2>
-        <button
-          onClick={handleClearWishlist}
-          className="btn btn-danger"
-        >
-          Clear All
-        </button>
+        <div className="wishlist-actions">
+          <button
+            onClick={handleRefreshCovers}
+            disabled={isRefreshingCovers}
+            className="btn btn-secondary"
+            title="Improve book cover accuracy using enhanced search"
+          >
+            {isRefreshingCovers ? '🔄 Refreshing...' : '🖼️ Refresh Covers'}
+          </button>
+          <button
+            onClick={handleClearWishlist}
+            className="btn btn-danger"
+          >
+            Clear All
+          </button>
+        </div>
       </div>
 
       <div className="wishlist-list">
@@ -56,12 +137,13 @@ const WishlistView: React.FC = () => {
           <div key={item.id} className="wishlist-item">
             <div className="wishlist-cover">
               <img 
-                src={item.coverUrl || 'https://via.placeholder.com/80x120/cccccc/666666?text=No+Cover'} 
+                src={getCoverUrl(item)} 
                 alt={`Cover of ${item.title}`}
                 className="book-cover-thumbnail"
                 onError={(e) => {
                   e.currentTarget.src = 'https://via.placeholder.com/80x120/cccccc/666666?text=No+Cover';
                 }}
+                loading="lazy"
               />
             </div>
             <div className="wishlist-item-content">
