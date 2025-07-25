@@ -137,6 +137,12 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
     }
   };
 
+  const handleRatingChange = (book: Book, newRating: number) => {
+    if (onBookUpdate) {
+      onBookUpdate({ ...book, rating: newRating });
+    }
+  };
+
 
   return (
     <div className="book-list">
@@ -174,7 +180,8 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
             <div className="book-rating">
               <StarRating 
                 rating={book.rating}
-                readonly={true}
+                onRatingChange={(newRating) => handleRatingChange(book, newRating)}
+                readonly={false}
                 size="small"
                 showNumber={true}
               />
