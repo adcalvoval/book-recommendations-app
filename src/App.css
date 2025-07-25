@@ -2658,12 +2658,14 @@
   color: #1a1a1a;
   font-size: 1.5rem;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .filter-controls {
   display: flex;
   align-items: center;
   gap: 1.5rem;
+  flex-shrink: 0;
 }
 
 .search-controls {
@@ -2686,7 +2688,7 @@
   background: white;
   color: #1a1a1a;
   transition: all 0.2s ease;
-  min-width: 200px;
+  width: 200px;
   padding-right: 2rem;
 }
 
