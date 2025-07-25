@@ -177,7 +177,7 @@ const fetchFromGoogleBooksEnhanced = async (book: Book): Promise<string | null> 
 };
 
 // Check if a Google Books result is a good match for our book
-const isGoodBookMatch = (book: Book, volumeInfo: any): boolean => {
+const isGoodBookMatch = (book: Book, volumeInfo: { title?: string; authors?: string[] }): boolean => {
   const bookTitle = book.title.toLowerCase().trim();
   const bookAuthor = book.author.toLowerCase().trim();
   

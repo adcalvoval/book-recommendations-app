@@ -273,13 +273,11 @@ interface UserPreferences {
   favoriteAuthors: { [author: string]: number };
   averageRating: number;
   preferredRatingRange: [number, number];
-  favoriteTags: { [tag: string]: number };
 }
 
 const analyzeUserPreferences = (books: Book[]): UserPreferences => {
   const genreCounts: { [genre: string]: number } = {};
   const authorCounts: { [author: string]: number } = {};
-  const tagCounts: { [tag: string]: number } = {};
   const ratings = books.map(book => book.rating);
 
   // Count genres
@@ -294,16 +292,6 @@ const analyzeUserPreferences = (books: Book[]): UserPreferences => {
     authorCounts[book.author] = (authorCounts[book.author] || 0) + 1;
   });
 
-  // Count tags (weighted by confidence and book rating)
-  books.forEach(book => {
-    if (book.tags) {
-      book.tags.forEach(tag => {
-        const weight = tag.confidence * (book.rating / 5); // Higher rated books with confident tags matter more
-        tagCounts[tag.name] = (tagCounts[tag.name] || 0) + weight;
-      });
-    }
-  });
-
   const averageRating = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
   const sortedRatings = ratings.sort((a, b) => a - b);
   const q1 = sortedRatings[Math.floor(sortedRatings.length * 0.25)];
@@ -313,8 +301,7 @@ const analyzeUserPreferences = (books: Book[]): UserPreferences => {
     favoriteGenres: genreCounts,
     favoriteAuthors: authorCounts,
     averageRating,
-    preferredRatingRange: [Math.max(1, q1 - 0.5), Math.min(5, q3 + 0.5)],
-    favoriteTags: tagCounts
+    preferredRatingRange: [Math.max(1, q1 - 0.5), Math.min(5, q3 + 0.5)]
   };
 };
 
@@ -323,8 +310,8 @@ const scoreBook = (book: Book, preferences: UserPreferences): BookRecommendation
   let maxPossibleScore = 0;
   const allFactors: string[] = [];
 
-  // Genre matching (25% weight - reduced to make room for tags)
-  const genreWeight = 25;
+  // Genre matching (40% weight - increased to replace tag matching)
+  const genreWeight = 40;
   let genreScore = 0;
   let maxGenreScore = 0;
   
@@ -343,33 +330,8 @@ const scoreBook = (book: Book, preferences: UserPreferences): BookRecommendation
   baseScore += genreScore;
   maxPossibleScore += maxGenreScore;
 
-  // Tag matching (20% weight - new!)
-  const tagWeight = 20;
-  let tagScore = 0;
-  let maxTagScore = 0;
-  
-  if (book.tags && book.tags.length > 0 && Object.keys(preferences.favoriteTags).length > 0) {
-    const totalTagWeight = Object.values(preferences.favoriteTags).reduce((a, b) => a + b, 0);
-    
-    book.tags.forEach(tag => {
-      const userTagWeight = preferences.favoriteTags[tag.name] || 0;
-      if (userTagWeight > 0) {
-        const tagPopularity = userTagWeight / totalTagWeight;
-        const tagContribution = tagPopularity * tag.confidence * tagWeight;
-        tagScore += tagContribution;
-        allFactors.push(`${tag.name}`);
-      }
-      maxTagScore += tagWeight / (book.tags?.length || 1);
-    });
-  } else {
-    maxTagScore = tagWeight;
-  }
-  
-  baseScore += tagScore;
-  maxPossibleScore += maxTagScore;
-
-  // Author matching (20% weight - reduced)
-  const authorWeight = 20;
+  // Author matching (30% weight - increased)
+  const authorWeight = 30;
   if (preferences.favoriteAuthors[book.author]) {
     const authorBooks = preferences.favoriteAuthors[book.author];
     const totalAuthorReads = Object.values(preferences.favoriteAuthors).reduce((a, b) => a + b, 0);
@@ -379,8 +341,8 @@ const scoreBook = (book: Book, preferences: UserPreferences): BookRecommendation
   }
   maxPossibleScore += authorWeight;
 
-  // Rating alignment (20% weight)
-  const ratingWeight = 20;
+  // Rating alignment (30% weight - increased)
+  const ratingWeight = 30;
   const [minRating, maxRating] = preferences.preferredRatingRange;
   if (book.rating >= minRating && book.rating <= maxRating) {
     // Score based on how close to user's average rating

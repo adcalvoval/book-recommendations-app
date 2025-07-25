@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Recommendation Sources</title>
+</head>
+<body>
+    <h1>Testing Recommendation Sources</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        // Import the source functions
+        import { getHighlyRatedBest21stCentury } from './src/utils/bestBooks21stCentury.ts';
+        import { getHighlyRatedGoodreadsBestBooks } from './src/utils/goodreadsBestBooks.ts';
+        import { getNewYorkerAwardWinners } from './src/utils/newYorkerBestBooks.ts';
+        import { getBrooklineBooksmithStaffPicks } from './src/utils/brooklineBooksmithRecommendations.ts';
+        
+        const output = document.getElementById('output');
+        
+        function logBooks(title, books) {
+            output.innerHTML += `<h2>${title}</h2>`;
+            output.innerHTML += `<p>Found ${books.length} books:</p>`;
+            books.forEach((book, i) => {
+                output.innerHTML += `<p>${i+1}. "${book.title}" by ${book.author} (${book.rating}) - ID: ${book.id}</p>`;
+            });
+            output.innerHTML += '<hr>';
+        }
+        
+        try {
+            // Test each source
+            console.log('🧪 Testing recommendation sources...');
+            
+            const best21st = getHighlyRatedBest21stCentury(4.0, 5);
+            logBooks('Best 21st Century Books (4.0+ rating)', best21st);
+            
+            const goodreads = getHighlyRatedGoodreadsBestBooks(4.0, 5);
+            logBooks('Goodreads Best Books (4.0+ rating)', goodreads);
+            
+            const newYorker = getNewYorkerAwardWinners(5);
+            logBooks('New Yorker Award Winners', newYorker);
+            
+            const brookline = getBrooklineBooksmithStaffPicks(5);
+            logBooks('Brookline Booksmith Staff Picks', brookline);
+            
+            // Check for overlaps
+            const allBooks = [...best21st, ...goodreads, ...newYorker, ...brookline];
+            const titleAuthorPairs = allBooks.map(b => `${b.title.toLowerCase()}-${b.author.toLowerCase()}`);
+            const uniquePairs = new Set(titleAuthorPairs);
+            
+            output.innerHTML += `<h2>Overlap Analysis</h2>`;
+            output.innerHTML += `<p>Total books: ${allBooks.length}</p>`;
+            output.innerHTML += `<p>Unique title-author pairs: ${uniquePairs.size}</p>`;
+            output.innerHTML += `<p>Duplicates: ${allBooks.length - uniquePairs.size}</p>`;
+            
+            // Find actual duplicates
+            const duplicates = [];
+            const seen = new Set();
+            titleAuthorPairs.forEach((pair, index) => {
+                if (seen.has(pair)) {
+                    duplicates.push(allBooks[index]);
+                } else {
+                    seen.add(pair);
+                }
+            });
+            
+            if (duplicates.length > 0) {
+                output.innerHTML += `<h3>Duplicate Books Found:</h3>`;
+                duplicates.forEach(book => {
+                    output.innerHTML += `<p>"${book.title}" by ${book.author} (ID: ${book.id})</p>`;
+                });
+            }
+            
+        } catch (error) {
+            output.innerHTML += `<p style="color: red;">Error: ${error.message}</p>`;
+            console.error('Test failed:', error);
+        }
+    </script>
+</body>
+</html>

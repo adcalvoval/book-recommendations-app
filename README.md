@@ -19,11 +19,13 @@ A personalized book recommendation system that helps you discover new books base
 - Content-based filtering using genres, themes, and reading patterns
 - Refresh suggestions to discover completely new recommendations
 
-### 🔍 Smart Search
-- Natural language search queries (e.g., "fantasy books like Harry Potter")
-- Search by mood, genre, author, or similarity to other books
-- Intelligent autocomplete and search suggestions
-- Filter recommendations based on specific criteria
+### 🔍 Claude AI-Powered Search & Similar Books
+- **Claude.ai Integration:** Ask Claude directly for book recommendations using natural language
+- **Similar Book Suggestions:** Click "Suggest a similar book" on any book card to get AI-powered similar recommendations
+- Interactive AI chat for personalized book discovery
+- Natural language queries (e.g., "I want something dark and psychological like Gone Girl")
+- Claude understands your reading history and preferences
+- Intelligent conversation with follow-up questions and suggestions
 
 ### 📊 Import & Export
 - Import your reading history from Goodreads CSV exports
@@ -47,7 +49,8 @@ A personalized book recommendation system that helps you discover new books base
 - **Build Tool:** Vite
 - **Styling:** CSS3 with Flexbox/Grid
 - **Storage:** Browser localStorage
-- **APIs:** Open Library, Google Books API
+- **APIs:** Claude.ai API, Google Books API, Open Library
+- **AI:** Claude-3-Sonnet for natural language book recommendations
 - **Book Data:** Goodreads-compatible CSV format
 
 ## Getting Started
@@ -69,12 +72,37 @@ cd book-recommendations
 npm install
 ```
 
-3. Start the development server:
+3. Configure API keys (optional but recommended):
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env and add your API keys:
+# VITE_CLAUDE_API_KEY=your_claude_api_key_here
+# VITE_GOOGLE_BOOKS_API_KEY=your_google_books_api_key_here
+```
+
+**Get your Claude API key:** Visit [Anthropic Console](https://console.anthropic.com/) to get your Claude API key for AI-powered search.
+
+4. Start the development server:
 ```bash
 npm run dev
 ```
 
-4. Open your browser and navigate to `http://localhost:5173`
+5. Open your browser and navigate to `http://localhost:5173`
+
+### Claude.ai Setup (Recommended)
+
+To use the AI-powered search feature:
+
+1. **Get API Key:** Sign up at [Anthropic Console](https://console.anthropic.com/)
+2. **Add to Environment:** Add your API key to the `.env` file:
+   ```
+   VITE_CLAUDE_API_KEY=your_actual_api_key_here
+   ```
+3. **Restart Dev Server:** After adding the API key, restart your development server
+
+**Without Claude API:** The app will still work and use fallback recommendations from curated book lists.
 
 ### Building for Production
 
@@ -89,8 +117,12 @@ The built files will be available in the `dist/` directory.
 1. **Add Books:** Start by adding books you've read using the form or import from Goodreads
 2. **Rate & Review:** Give books ratings (including half-stars) and add personal notes
 3. **Get Recommendations:** Click "Get Recommendations" to see personalized suggestions
-4. **Smart Search:** Use the search bar to find books by mood, genre, or similarity
-5. **Manage Library:** Edit tags, summaries, and notes to improve future recommendations
+4. **Ask Claude:** Use the AI-powered search to ask Claude for recommendations in natural language
+   - "I want something like The Seven Husbands of Evelyn Hugo"
+   - "Recommend me 5 sci-fi books similar to Dune"
+   - "What should I read if I want something dark and psychological?"
+5. **Find Similar Books:** Click the "🔍 Suggest a similar book" button on any book in your library to get AI-powered similar recommendations
+6. **Manage Library:** Edit tags, summaries, and notes to improve future recommendations
 
 ## File Structure
 
@@ -104,6 +136,7 @@ src/
 │   └── ...
 ├── utils/              # Utility functions
 │   ├── recommendations.ts  # Recommendation algorithm
+│   ├── claudeRecommendations.ts # Claude AI integration
 │   ├── searchRecommendations.ts # Search filtering
 │   ├── csvParser.ts    # Goodreads import
 │   └── ...

@@ -25,6 +25,34 @@ interface CachedBookData {
 
 const bookDataCache = new Map<string, CachedBookData>();
 
+// Function to search Goodreads and extract book summary
+const searchGoodreadsForBook = async (book: Book): Promise<string | undefined> => {
+  try {
+    console.log(`Searching Goodreads for: ${book.title} by ${book.author}`);
+    
+    // This would need to be implemented with a backend service or proxy
+    // For now, we'll return undefined and fall back to Open Library
+    return undefined;
+  } catch (error) {
+    console.warn(`Error searching Goodreads for ${book.title}:`, error);
+    return undefined;
+  }
+};
+
+// Helper function to truncate summary to max 3 sentences
+const truncateToSentences = (text: string, maxSentences: number = 3): string => {
+  if (!text) return '';
+  
+  // Simple sentence splitting (handles periods, exclamation marks, question marks)
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  
+  if (sentences.length <= maxSentences) {
+    return text.trim();
+  }
+  
+  return sentences.slice(0, maxSentences).join(' ').trim();
+};
+
 export const fetchBookDataFromGoodreads = async (book: Book): Promise<GoodreadsBookData> => {
   const cacheKey = `${book.title}-${book.author}`;
   
@@ -35,8 +63,13 @@ export const fetchBookDataFromGoodreads = async (book: Book): Promise<GoodreadsB
   }
 
   try {
-    // For now, we only use Open Library API (Goodreads integration would require backend)
     const bookData: GoodreadsBookData = {};
+    
+    // Try to get summary from Goodreads (this would need backend implementation)
+    const goodreadsSummary = await searchGoodreadsForBook(book);
+    if (goodreadsSummary) {
+      bookData.summary = truncateToSentences(goodreadsSummary, 3);
+    }
     
     // Cache the result
     bookDataCache.set(cacheKey, {
@@ -80,10 +113,15 @@ export const fetchBookSummaryFromOpenLibrary = async (book: Book): Promise<strin
         if (workResponse.ok) {
           const workData = await workResponse.json();
           if (workData.description) {
+            let description = '';
             if (typeof workData.description === 'string') {
-              return workData.description;
+              description = workData.description;
             } else if (workData.description.value) {
-              return workData.description.value;
+              description = workData.description.value;
+            }
+            
+            if (description) {
+              return truncateToSentences(description, 3);
             }
           }
         }
@@ -120,7 +158,7 @@ export const fetchBookSummariesBatch = async (books: Book[]): Promise<Map<string
           summaryMap.set(bookId, goodreadsData.summary);
           return;
         }
-      } catch (error) {
+      } catch {
         console.warn(`Goodreads fetch failed for ${book.title}, trying Open Library`);
       }
       

@@ -1,7 +1,6 @@
 import React from 'react';
 import type { Book } from '../types';
 import type { BookRecommendation } from '../utils/recommendations';
-import BookTags from './BookTags';
 import BookCover from './BookCover';
 
 interface RecommendationListProps {
@@ -87,9 +86,6 @@ const RecommendationList: React.FC<RecommendationListProps> = ({
               <span className="rating-number">({book.rating}/5)</span>
             </div>
             {book.year && <p className="book-year">Published: {book.year}</p>}
-            {book.tags && book.tags.length > 0 && (
-              <BookTags tags={book.tags} />
-            )}
             {book.summary && (
               <div className="book-summary">
                 <h5>Summary:</h5>

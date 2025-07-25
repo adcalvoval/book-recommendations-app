@@ -1,7 +1,7 @@
 import React from 'react';
-import type { Book, BookTag } from '../types';
-import EditableTags from './EditableTags';
+import type { Book } from '../types';
 import EditableText from './EditableText';
+import EditableTags from './EditableTags';
 import BookCover from './BookCover';
 import StarRating from './StarRating';
 
@@ -12,19 +12,14 @@ interface BookListProps {
 }
 
 const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }) => {
+
   if (books.length === 0) {
     return (
       <div className="book-list-empty">
-        <p>No books added yet. Add some books you've read to get personalized recommendations!</p>
+        <p>No books added yet. Add some books you've read to start building your library!</p>
       </div>
     );
   }
-
-  const handleTagsChange = (book: Book, newTags: BookTag[]) => {
-    if (onBookUpdate) {
-      onBookUpdate({ ...book, tags: newTags });
-    }
-  };
 
   const handleSummaryChange = (book: Book, newSummary: string) => {
     if (onBookUpdate) {
@@ -47,6 +42,12 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
   const handleNotesDelete = (book: Book) => {
     if (onBookUpdate) {
       onBookUpdate({ ...book, description: undefined });
+    }
+  };
+
+  const handleTagsChange = (book: Book, newTags: string[]) => {
+    if (onBookUpdate) {
+      onBookUpdate({ ...book, tags: newTags });
     }
   };
 
@@ -86,10 +87,16 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
               />
             </div>
             {book.year && <p className="book-year">Published: {book.year}</p>}
-            <EditableTags 
-              tags={book.tags || []} 
-              onTagsChange={(newTags) => handleTagsChange(book, newTags)}
-            />
+            
+            <div className="book-tags-section">
+              <EditableTags
+                tags={book.tags || []}
+                onTagsChange={(newTags) => handleTagsChange(book, newTags)}
+                placeholder="Add tags..."
+                className="book-tags-editable"
+              />
+            </div>
+            
             <EditableText 
               value={book.summary || ''}
               onSave={(newSummary) => handleSummaryChange(book, newSummary)}

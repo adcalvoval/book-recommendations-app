@@ -14,7 +14,8 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit, onCancel }) => {
     genre: '',
     rating: 5.0,
     description: '',
-    year: new Date().getFullYear()
+    year: new Date().getFullYear(),
+    tags: ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -27,7 +28,8 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit, onCancel }) => {
         genre: '',
         rating: 5.0,
         description: '',
-        year: new Date().getFullYear()
+        year: new Date().getFullYear(),
+        tags: ''
       });
     }
   };
@@ -110,6 +112,18 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit, onCancel }) => {
           onChange={handleChange}
           min="1000"
           max={new Date().getFullYear()}
+        />
+      </div>
+
+      <div className="form-group">
+        <label htmlFor="tags">Tags</label>
+        <input
+          type="text"
+          id="tags"
+          name="tags"
+          value={formData.tags}
+          onChange={handleChange}
+          placeholder="e.g., favorite, must-read, classic (comma-separated)"
         />
       </div>
 

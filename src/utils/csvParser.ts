@@ -1,6 +1,6 @@
-import type { Book, WantToReadBook } from '../types';
+import type { Book } from '../types';
 
-export interface GoodreadsCSVRow {
+export interface GoodreadsCSVRow extends Record<string, string> {
   'Book Id': string;
   'Title': string;
   'Author': string;
@@ -27,12 +27,12 @@ export interface GoodreadsCSVRow {
   'Owned Copies': string;
 }
 
-export const parseCSV = (csvText: string): any[] => {
+export const parseCSV = (csvText: string): Record<string, string>[] => {
   const lines = csvText.split('\n');
   if (lines.length < 2) return [];
 
   const headers = parseCSVLine(lines[0]);
-  const rows: any[] = [];
+  const rows: Record<string, string>[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -41,7 +41,7 @@ export const parseCSV = (csvText: string): any[] => {
     const values = parseCSVLine(line);
     if (values.length !== headers.length) continue;
 
-    const row: any = {};
+    const row: Record<string, string> = {};
     headers.forEach((header, index) => {
       row[header] = values[index] || '';
     });
@@ -117,72 +117,6 @@ export const convertGoodreadsToBooks = (csvRows: GoodreadsCSVRow[]): Book[] => {
     .filter(book => book.title !== 'Unknown Title' && book.rating > 0);
 };
 
-export const convertGoodreadsToWantToReadBooks = (csvRows: GoodreadsCSVRow[]): WantToReadBook[] => {
-  // Debug: Check what columns are available and what values exist
-  console.log('🔍 Debugging want-to-read detection:');
-  if (csvRows.length > 0) {
-    console.log('Available columns:', Object.keys(csvRows[0]));
-    console.log('Sample exclusive shelf values:', csvRows.slice(0, 10).map(row => ({
-      title: row['Title'],
-      exclusiveShelf: row['Exclusive Shelf'],
-      exclusiveShelfRaw: JSON.stringify(row['Exclusive Shelf'])
-    })));
-  }
-
-  const toReadBooks = csvRows.filter(row => {
-    // Check multiple possible shelf column names and values
-    const exclusiveShelf = (row['Exclusive Shelf'] || (row as any)['Shelf'] || (row as any)['Read Status'] || '')?.toLowerCase()?.trim();
-    
-    // Check for various "to-read" variations
-    const toReadVariations = ['to-read', 'to read', 'want to read', 'currently-reading', 'reading'];
-    const isToRead = toReadVariations.some(variation => 
-      exclusiveShelf === variation || exclusiveShelf.includes('to-read') || exclusiveShelf.includes('want')
-    );
-    
-    // Special check: if there's no rating, it might be a want-to-read book
-    const hasNoRating = !row['My Rating'] || parseInt(row['My Rating']) === 0;
-    const notRead = exclusiveShelf !== 'read';
-    
-    const finalIsToRead = isToRead || (hasNoRating && notRead && exclusiveShelf !== 'did not finish');
-    
-    // Debug individual rows (limit to first 20 for readability)
-    if (row['Title'] && csvRows.indexOf(row) < 20) {
-      console.log(`📖 "${row['Title']}" shelf: "${exclusiveShelf}" rating: "${row['My Rating']}" -> ${finalIsToRead ? '✅ TO read' : '❌ not to read'}`);
-    }
-    
-    return finalIsToRead;
-  });
-
-  console.log('Want to Read CSV Import Debug:');
-  console.log('Total rows:', csvRows.length);
-  console.log('To-read books:', toReadBooks.length);
-  console.log('Sample to-read rows:', toReadBooks.slice(0, 3).map(row => ({
-    title: row['Title'],
-    exclusiveShelf: row['Exclusive Shelf'],
-    dateAdded: row['Date Added']
-  })));
-
-  return toReadBooks
-    .map(row => {
-      const genres = extractGenres(row['Bookshelves'], row['Bookshelves with positions'], row['Title'], row['Author']);
-      const year = parseInt(row['Year Published']) || parseInt(row['Original Publication Year']) || undefined;
-      const cleanISBN = cleanISBNField(row['ISBN13'] || row['ISBN']);
-
-      return {
-        id: `goodreads-wtr-${row['Book Id']}`,
-        title: row['Title'] || 'Unknown Title',
-        author: row['Author'] || 'Unknown Author',
-        genre: genres,
-        description: row['My Review'] || undefined,
-        year: year,
-        isbn: cleanISBN || undefined,
-        dateAdded: row['Date Added'] || new Date().toISOString(),
-        priority: 'medium' as const,
-        notes: row['Private Notes'] || undefined
-      };
-    })
-    .filter(book => book.title !== 'Unknown Title');
-};
 
 const cleanISBNField = (isbn: string): string | null => {
   if (!isbn) return null;
@@ -274,7 +208,7 @@ const inferGenresFromTitleAuthor = (title: string, author: string): string[] => 
   return genres;
 };
 
-export const validateGoodreadsCSV = (csvRows: any[]): { isValid: boolean; error?: string } => {
+export const validateGoodreadsCSV = (csvRows: Record<string, string>[]): { isValid: boolean; error?: string } => {
   if (csvRows.length === 0) {
     return { isValid: false, error: 'CSV file is empty' };
   }

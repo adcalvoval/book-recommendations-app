@@ -1,9 +1,3 @@
-export interface BookTag {
-  name: string;
-  category: 'genre' | 'theme' | 'setting' | 'mood' | 'length' | 'era' | 'style' | 'audience';
-  confidence: number;
-}
-
 export interface Book {
   id: string;
   title: string;
@@ -14,24 +8,8 @@ export interface Book {
   summary?: string;
   year?: number;
   isbn?: string;
-  tags?: BookTag[];
   coverUrl?: string;
-}
-
-export interface WantToReadBook {
-  id: string;
-  title: string;
-  author: string;
-  genre: string[];
-  description?: string;
-  summary?: string;
-  year?: number;
-  isbn?: string;
-  tags?: BookTag[];
-  coverUrl?: string;
-  dateAdded?: string; // ISO timestamp when added to want-to-read
-  priority?: 'low' | 'medium' | 'high'; // User can set reading priority
-  notes?: string; // User notes about why they want to read it
+  tags?: string[];
 }
 
 export interface BookFormData {
@@ -42,4 +20,18 @@ export interface BookFormData {
   description?: string;
   summary?: string;
   year?: number;
+  tags?: string;
+}
+
+export interface WishlistItem {
+  id: string;
+  title: string;
+  author: string;
+  summary: string;
+  genre?: string[];
+  year?: number;
+  coverUrl?: string;
+  rating?: number; // Out of 5
+  dateAdded: string;
+  source: 'search' | 'manual';
 }
