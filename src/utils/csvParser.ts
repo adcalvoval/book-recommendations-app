@@ -227,3 +227,96 @@ export const validateGoodreadsCSV = (csvRows: Record<string, string>[]): { isVal
 
   return { isValid: true };
 };
+
+export const exportWishlistToGoodreadsCSV = (wishlistItems: import('../types').WishlistItem[]): string => {
+  // Goodreads CSV headers - using the same format as the import
+  const headers = [
+    'Book Id',
+    'Title', 
+    'Author',
+    'Author l-f',
+    'Additional Authors',
+    'ISBN',
+    'ISBN13',
+    'My Rating',
+    'Average Rating',
+    'Publisher',
+    'Binding',
+    'Number of Pages',
+    'Year Published',
+    'Original Publication Year',
+    'Date Read',
+    'Date Added',
+    'Bookshelves',
+    'Bookshelves with positions',
+    'Exclusive Shelf',
+    'My Review',
+    'Spoiler',
+    'Private Notes',
+    'Read Count',
+    'Owned Copies'
+  ];
+
+  const csvRows: string[] = [];
+  csvRows.push(headers.map(header => `"${header}"`).join(','));
+
+  wishlistItems.forEach((item, index) => {
+    const bookId = item.id.replace('goodreads-', '') || (index + 1).toString();
+    const authorLastFirst = formatAuthorLastFirst(item.author);
+    const bookshelves = item.genre ? item.genre.map(g => g.toLowerCase().replace(/\s+/g, '-')).join(',') : 'to-read';
+    const dateAdded = formatDateForGoodreads(item.dateAdded);
+    
+    const row = [
+      bookId,                           // Book Id
+      item.title,                       // Title
+      item.author,                      // Author
+      authorLastFirst,                  // Author l-f
+      '',                              // Additional Authors
+      '',                              // ISBN
+      '',                              // ISBN13
+      item.rating ? item.rating.toString() : '0', // My Rating
+      item.rating ? item.rating.toString() : '0', // Average Rating
+      '',                              // Publisher
+      '',                              // Binding
+      '',                              // Number of Pages
+      item.year ? item.year.toString() : '', // Year Published
+      item.year ? item.year.toString() : '', // Original Publication Year
+      '',                              // Date Read
+      dateAdded,                       // Date Added
+      bookshelves,                     // Bookshelves
+      bookshelves,                     // Bookshelves with positions
+      'to-read',                       // Exclusive Shelf
+      item.summary || '',              // My Review
+      '',                              // Spoiler
+      '',                              // Private Notes
+      '0',                             // Read Count
+      '0'                              // Owned Copies
+    ];
+
+    csvRows.push(row.map(field => `"${field.replace(/"/g, '""')}"`).join(','));
+  });
+
+  return csvRows.join('\n');
+};
+
+const formatAuthorLastFirst = (author: string): string => {
+  const parts = author.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return parts[0];
+  }
+  const firstName = parts.slice(0, -1).join(' ');
+  const lastName = parts[parts.length - 1];
+  return `${lastName}, ${firstName}`;
+};
+
+const formatDateForGoodreads = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}/${month}/${day}`;
+  } catch {
+    return new Date().toISOString().split('T')[0].replace(/-/g, '/');
+  }
+};

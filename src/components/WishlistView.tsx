@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { storage } from '../utils/storage';
 import { refreshMultipleBookCovers } from '../utils/bookCovers';
+import { exportWishlistToGoodreadsCSV } from '../utils/csvParser';
 import type { WishlistItem, Book } from '../types';
 
 const WishlistView: React.FC = () => {
@@ -92,6 +93,31 @@ const WishlistView: React.FC = () => {
     }
   };
 
+  const handleExportWishlist = () => {
+    if (wishlist.length === 0) {
+      alert('Your wishlist is empty. Add some books before exporting.');
+      return;
+    }
+
+    try {
+      const csvContent = exportWishlistToGoodreadsCSV(wishlist);
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `wishlist-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      console.log(`📤 Exported ${wishlist.length} books to CSV`);
+    } catch (error) {
+      console.error('❌ Error exporting wishlist:', error);
+      alert('Failed to export wishlist. Please try again.');
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
   };
@@ -115,6 +141,13 @@ const WishlistView: React.FC = () => {
       <div className="wishlist-header">
         <h2>📋 My Wishlist ({wishlist.length} books)</h2>
         <div className="wishlist-actions">
+          <button
+            onClick={handleExportWishlist}
+            className="btn btn-primary"
+            title="Export wishlist as CSV for Goodreads import"
+          >
+            📤 Export to CSV
+          </button>
           <button
             onClick={handleRefreshCovers}
             disabled={isRefreshingCovers}
