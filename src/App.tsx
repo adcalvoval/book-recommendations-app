@@ -124,20 +124,20 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🔍 📚 My Book Library</h1>
+        <h1>My Book Library</h1>
         <p>Track your reading and manage your personal book collection</p>
         <nav className="app-nav">
           <button 
             onClick={() => setCurrentView('books')}
             className={`nav-btn ${currentView === 'books' ? 'active' : ''}`}
           >
-            📚 My Books
+My Books
           </button>
           <button 
             onClick={() => setCurrentView('wishlist')}
             className={`nav-btn ${currentView === 'wishlist' ? 'active' : ''}`}
           >
-            📋 Wishlist
+Wishlist
           </button>
         </nav>
       </header>

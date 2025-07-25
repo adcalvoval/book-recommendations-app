@@ -7,7 +7,7 @@
   margin: 0 auto;
   padding: 1rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background: linear-gradient(135deg, #2c1810 0%, #4a1a1a 100%);
+  background: #fafafa;
   min-height: 100vh;
 }
 
@@ -15,43 +15,30 @@
   text-align: center;
   margin-bottom: 2rem;
   padding: 3rem 2rem;
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%);
-  border-radius: 20px;
-  color: white;
-  box-shadow: 0 20px 40px rgba(139, 21, 56, 0.4);
+  background: white;
+  border-radius: 12px;
+  color: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e5e5;
   position: relative;
   overflow: hidden;
 }
 
-.app-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
-              radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
-}
 
 .app-header h1 {
   margin: 0 0 0.5rem 0;
-  font-size: 3rem;
-  font-weight: 800;
-  background: linear-gradient(45deg, #ffffff, #f0f4ff);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: #1a1a1a;
   position: relative;
   z-index: 1;
 }
 
 .app-header p {
   margin: 0 0 1rem 0;
-  opacity: 0.95;
-  font-size: 1.2rem;
-  font-weight: 300;
+  color: #666;
+  font-size: 1.1rem;
+  font-weight: 400;
   position: relative;
   z-index: 1;
 }
@@ -91,10 +78,11 @@
 }
 
 .nav-btn.active {
-  color: white;
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%);
-  box-shadow: 0 8px 25px rgba(139, 21, 56, 0.4);
-  transform: translateY(-2px);
+  color: #1a1a1a;
+  background: #f5f5f5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+  border: 1px solid #e5e5e5;
 }
 
 .nav-btn.active::before {
@@ -162,15 +150,16 @@
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%);
+  background: #1a1a1a;
   color: white;
-  box-shadow: 0 8px 25px rgba(139, 21, 56, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border: 1px solid #1a1a1a;
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 35px rgba(139, 21, 56, 0.4);
-  background: linear-gradient(135deg, #7a1230 0%, #9a1a3a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  background: #333;
 }
 
 .btn-secondary {
@@ -265,10 +254,9 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #8b1538;
-  box-shadow: 0 0 0 4px rgba(139, 21, 56, 0.15), 0 8px 25px rgba(139, 21, 56, 0.1);
+  border-color: #666;
+  box-shadow: 0 0 0 2px rgba(102, 102, 102, 0.15);
   background: white;
-  transform: translateY(-1px);
 }
 
 .form-actions {
@@ -305,8 +293,8 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%);
+  height: 2px;
+  background: #ddd;
   transform: scaleX(0);
   transition: transform 0.3s ease;
 }
@@ -397,14 +385,13 @@
 }
 
 .similarity-badge {
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%);
-  color: white;
+  background: #f5f5f5;
+  color: #666;
   padding: 0.25rem 0.75rem;
-  border-radius: 20px;
+  border-radius: 12px;
   font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-weight: 500;
+  border: 1px solid #e5e5e5;
 }
 
 /* Book Tags Styles - REMOVED */
@@ -420,13 +407,12 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.25rem 0.75rem;
-  border-radius: 16px;
+  border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 500;
-  color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: #8b1538; /* Default background for user tags */
+  color: #666;
+  background: #f5f5f5;
+  border: 1px solid #e5e5e5;
   transition: all 0.2s ease;
 }
 
@@ -456,14 +442,14 @@
 }
 
 /* Category-specific styling (fallback colors) */
-.tag-genre { background: #8b1538; }
-.tag-theme { background: #d63384; }
-.tag-setting { background: #6f42c1; }
-.tag-mood { background: #198754; }
-.tag-length { background: #dc3545; }
-.tag-era { background: #fd7e14; color: #333; text-shadow: none; }
-.tag-style { background: #20c997; color: #333; text-shadow: none; }
-.tag-audience { background: #6f42c1; }
+.tag-genre { background: #f0f0f0; color: #666; }
+.tag-theme { background: #f0f0f0; color: #666; }
+.tag-setting { background: #f0f0f0; color: #666; }
+.tag-mood { background: #f0f0f0; color: #666; }
+.tag-length { background: #f0f0f0; color: #666; }
+.tag-era { background: #f0f0f0; color: #666; }
+.tag-style { background: #f0f0f0; color: #666; }
+.tag-audience { background: #f0f0f0; color: #666; }
 
 /* Editable Tags Styles - REMOVED */
 .editable-tags {
@@ -512,8 +498,8 @@
   align-items: center;
   gap: 0.25rem;
   background: white;
-  border: 2px solid #8b1538;
-  border-radius: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
   padding: 0.25rem 0.5rem;
 }
 
@@ -584,7 +570,7 @@
   padding: 1rem;
   background: #f8f9fa;
   border-radius: 8px;
-  border-left: 3px solid #8b1538;
+  border-left: 2px solid #ddd;
   transition: all 0.2s ease;
 }
 
@@ -626,7 +612,7 @@
 }
 
 .btn-edit:hover {
-  background-color: rgba(139, 21, 56, 0.1);
+  background-color: rgba(0, 0, 0, 0.05);
   opacity: 1;
 }
 
@@ -711,7 +697,7 @@
 }
 
 .editable-text-content:hover {
-  background-color: rgba(139, 21, 56, 0.05);
+  background-color: rgba(0, 0, 0, 0.02);
 }
 
 .editable-text-content p {
@@ -743,8 +729,8 @@
 .editable-textarea:focus,
 .editable-input:focus {
   outline: none;
-  border-color: #8b1538;
-  box-shadow: 0 0 0 3px rgba(139, 21, 56, 0.1);
+  border-color: #666;
+  box-shadow: 0 0 0 2px rgba(102, 102, 102, 0.1);
 }
 
 .editable-textarea:disabled,
@@ -796,8 +782,8 @@
 }
 
 .search-input-wrapper:focus-within {
-  border-color: #8b1538;
-  box-shadow: 0 0 0 3px rgba(139, 21, 56, 0.1);
+  border-color: #666;
+  box-shadow: 0 0 0 2px rgba(102, 102, 102, 0.1);
   background: white;
 }
 
@@ -914,16 +900,17 @@
 }
 
 .example-query:hover {
-  background: #8b1538;
-  color: white;
-  border-color: #8b1538;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  border-color: #ddd;
   transform: translateY(-1px);
 }
 
 /* Search results indicator */
 .search-active {
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%) !important;
-  color: white;
+  background: #f5f5f5 !important;
+  color: #1a1a1a;
+  border: 1px solid #ddd;
 }
 
 .search-active .search-input {
@@ -1043,7 +1030,7 @@
   padding: 1.5rem;
   background: #f8f9fa;
   border-radius: 8px;
-  border-left: 4px solid #8b1538;
+  border-left: 2px solid #ddd;
 }
 
 .book-info h4 {
@@ -1091,8 +1078,8 @@
 .form-input:focus,
 .form-textarea:focus {
   outline: none;
-  border-color: #8b1538;
-  box-shadow: 0 0 0 3px rgba(139, 21, 56, 0.1);
+  border-color: #666;
+  box-shadow: 0 0 0 2px rgba(102, 102, 102, 0.1);
 }
 
 .form-textarea {
@@ -1464,8 +1451,9 @@
   justify-content: center;
   padding: 0.5rem;
   text-align: center;
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%);
-  color: white;
+  background: #f5f5f5;
+  color: #666;
+  border: 1px solid #e5e5e5;
 }
 
 .book-cover-title {
@@ -1606,13 +1594,13 @@
 }
 
 .btn-add-to-library {
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%);
+  background: #1a1a1a;
   color: white;
-  border: none;
+  border: 1px solid #1a1a1a;
   padding: 0.75rem 1.5rem;
   border-radius: 8px;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -1620,7 +1608,7 @@
   gap: 0.5rem;
   flex: 1;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(139, 21, 56, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .btn-reject {
@@ -1643,8 +1631,8 @@
 
 .btn-add-to-library:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(139, 21, 56, 0.3);
-  background: linear-gradient(135deg, #7a1230 0%, #9a1a3a 100%);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  background: #333;
 }
 
 .btn-add-to-library:active {
@@ -1763,7 +1751,7 @@
   padding: 1.5rem;
   border-radius: 8px;
   margin-bottom: 2rem;
-  border-left: 4px solid #8b1538;
+  border-left: 2px solid #ddd;
 }
 
 .import-instructions h4 {
@@ -1783,7 +1771,7 @@
 }
 
 .import-instructions a {
-  color: #8b1538;
+  color: #666;
   text-decoration: none;
 }
 
@@ -1811,8 +1799,8 @@
 }
 
 .file-upload-label:hover {
-  border-color: #8b1538;
-  background: #fdf2f2;
+  border-color: #ddd;
+  background: #f5f5f5;
 }
 
 .upload-content {
@@ -1987,7 +1975,7 @@
   width: 40px;
   height: 40px;
   border: 4px solid #f3f3f3;
-  border-top: 4px solid #8b1538;
+  border-top: 4px solid #666;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 1rem;
@@ -2437,10 +2425,9 @@
 
 .search-input:focus {
   outline: none;
-  border-color: #8b1538;
-  box-shadow: 0 0 0 4px rgba(139, 21, 56, 0.15), 0 8px 25px rgba(139, 21, 56, 0.1);
+  border-color: #666;
+  box-shadow: 0 0 0 2px rgba(102, 102, 102, 0.1);
   background: white;
-  transform: translateY(-1px);
 }
 
 .search-input::placeholder {
@@ -2495,7 +2482,7 @@
   width: 32px;
   height: 32px;
   border: 3px solid #f3f3f3;
-  border-top: 3px solid #8b1538;
+  border-top: 3px solid #666;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 1rem;
@@ -2611,7 +2598,7 @@
 }
 
 .recommendation-author {
-  color: #8b1538;
+  color: #666;
   font-weight: 500;
   font-style: italic;
 }
@@ -2668,13 +2655,9 @@
 
 .sort-header h3 {
   margin: 0;
-  color: #1a202c;
+  color: #1a1a1a;
   font-size: 1.5rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #8b1538 0%, #a91b3e 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-weight: 600;
 }
 
 .sort-controls {
@@ -2705,10 +2688,9 @@
 
 .sort-select:focus {
   outline: none;
-  border-color: #8b1538;
-  box-shadow: 0 0 0 4px rgba(139, 21, 56, 0.15);
+  border-color: #666;
+  box-shadow: 0 0 0 2px rgba(102, 102, 102, 0.1);
   background: white;
-  transform: translateY(-1px);
 }
 
 .sort-select:hover {
