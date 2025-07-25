@@ -5,7 +5,6 @@ import EditableTags from './EditableTags';
 import BookCover from './BookCover';
 import StarRating from './StarRating';
 import BookSortFilter, { type SortOption } from './BookSortFilter';
-import { refreshMultipleBookCovers } from '../utils/bookCovers';
 
 interface BookListProps {
   books: Book[];
@@ -28,10 +27,6 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
     const saved = localStorage.getItem(SEARCH_PREFERENCE_KEY);
     return saved || '';
   });
-
-  // Cover refresh state
-  const [isRefreshingCovers, setIsRefreshingCovers] = useState(false);
-  const [coverUrls, setCoverUrls] = useState<Map<string, string>>(new Map());
 
   // Save sort preference to localStorage when it changes
   useEffect(() => {
@@ -148,56 +143,6 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
     }
   };
 
-  // Refresh covers for all library books
-  const handleRefreshCovers = async () => {
-    if (books.length === 0) return;
-    
-    setIsRefreshingCovers(true);
-    console.log('🔄 Starting cover refresh for library books...');
-    
-    try {
-      // Use the enhanced cover fetching system
-      const newCoverMap = await refreshMultipleBookCovers(books);
-      
-      if (newCoverMap.size > 0) {
-        // Update the local cover URLs state
-        setCoverUrls(prev => {
-          const updated = new Map(prev);
-          newCoverMap.forEach((url, id) => {
-            updated.set(id, url);
-          });
-          return updated;
-        });
-        
-        // Update books with new covers
-        books.forEach(book => {
-          const newCoverUrl = newCoverMap.get(book.id);
-          if (newCoverUrl && newCoverUrl !== book.coverUrl) {
-            const updatedBook = { ...book, coverUrl: newCoverUrl };
-            if (onBookUpdate) {
-              onBookUpdate(updatedBook);
-            }
-          }
-        });
-        
-        console.log(`✅ Updated ${newCoverMap.size} book covers in library`);
-      } else {
-        console.log('ℹ️ No cover improvements found');
-      }
-    } catch (error) {
-      console.error('❌ Error refreshing covers:', error);
-    } finally {
-      setIsRefreshingCovers(false);
-    }
-  };
-
-  // Get the best available cover URL for a book
-  const getCoverUrl = (book: Book): string => {
-    // Use enhanced cover if available, otherwise fall back to original
-    const enhancedCover = coverUrls.get(book.id);
-    return enhancedCover || book.coverUrl || 'https://via.placeholder.com/80x120/cccccc/666666?text=No+Cover';
-  };
-
 
   return (
     <div className="book-list">
@@ -209,24 +154,12 @@ const BookList: React.FC<BookListProps> = ({ books, onRemoveBook, onBookUpdate }
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
-      <div className="book-list-actions">
-        <button
-          onClick={handleRefreshCovers}
-          disabled={isRefreshingCovers || books.length === 0}
-          className="btn btn-secondary"
-          title="Improve book cover accuracy using enhanced search"
-          style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px 20px', margin: '10px 0' }}
-        >
-          {isRefreshingCovers ? '🔄 Refreshing...' : `🖼️ Refresh Covers (${books.length} books)`}
-        </button>
-      </div>
       <div className="books-grid">
         {sortedBooks.map(book => (
           <div key={book.id} className="book-card">
             <BookCover 
               book={book} 
               size="medium" 
-              customCoverUrl={getCoverUrl(book)}
             />
             <div className="book-content">
               <div className="book-header">

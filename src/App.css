@@ -2342,19 +2342,6 @@ body {
   transform: translateY(0);
 }
 
-.book-list-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin: 1rem 0;
-  padding: 0.5rem 0;
-  border-top: 1px solid #e5e7eb;
-}
-
-.book-list-actions .btn {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-}
-
 .notes-display p {
   margin: 0 0 0.5rem 0;
   color: #6b7280;

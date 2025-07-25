@@ -3,6 +3,7 @@ import './App.css';
 import type { Book, BookFormData } from './types';
 import { storage } from './utils/storage';
 import { fetchBookSummaryFromOpenLibrary } from './utils/goodreadsApi';
+import { refreshMultipleBookCovers } from './utils/bookCovers';
 import BookForm from './components/BookForm';
 import BookList from './components/BookList';
 import CSVImport from './components/CSVImport';
@@ -14,6 +15,7 @@ function App() {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [currentView, setCurrentView] = useState<'books' | 'wishlist'>('books');
+  const [isRefreshingCovers, setIsRefreshingCovers] = useState(false);
 
   useEffect(() => {
     const loadedBooks = storage.getBooks();
@@ -121,6 +123,38 @@ function App() {
     }
   };
 
+  // Refresh covers for all library books
+  const handleRefreshCovers = async () => {
+    if (books.length === 0) return;
+    
+    setIsRefreshingCovers(true);
+    console.log('🔄 Starting cover refresh for library books...');
+    
+    try {
+      // Use the enhanced cover fetching system
+      const newCoverMap = await refreshMultipleBookCovers(books);
+      
+      if (newCoverMap.size > 0) {
+        // Update books with new covers
+        books.forEach(book => {
+          const newCoverUrl = newCoverMap.get(book.id);
+          if (newCoverUrl && newCoverUrl !== book.coverUrl) {
+            const updatedBook = { ...book, coverUrl: newCoverUrl };
+            handleBookUpdate(updatedBook);
+          }
+        });
+        
+        console.log(`✅ Updated ${newCoverMap.size} book covers in library`);
+      } else {
+        console.log('ℹ️ No cover improvements found');
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing covers:', error);
+    } finally {
+      setIsRefreshingCovers(false);
+    }
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -152,6 +186,14 @@ Wishlist
             <div className="section-header">
               <h2>Your Reading Library</h2>
               <div className="section-actions">
+                <button
+                  onClick={handleRefreshCovers}
+                  disabled={isRefreshingCovers || books.length === 0}
+                  className="btn btn-secondary"
+                  title="Improve book cover accuracy using enhanced search"
+                >
+                  {isRefreshingCovers ? '🔄 Refreshing...' : '🖼️ Refresh Covers'}
+                </button>
                 <button 
                   onClick={() => setShowImport(!showImport)}
                   className="btn btn-secondary"
