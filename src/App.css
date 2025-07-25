@@ -2144,12 +2144,6 @@
   flex-wrap: wrap;
 }
 
-.sort-controls,
-.filter-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
 
 .sort-controls label,
 .filter-controls label {
@@ -2642,7 +2636,8 @@
 }
 
 .sort-header {
-  display: flex;
+  display: flex !important;
+  flex-direction: row !important;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
