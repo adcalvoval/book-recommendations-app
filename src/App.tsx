@@ -220,19 +220,11 @@ Wishlist
               <div className="section-actions">
                 <button
                   onClick={handleRefreshCovers}
-                  disabled={isRefreshingCovers}
-                  className="btn btn-secondary"
+                  disabled={isRefreshingCovers || books.length === 0}
+                  className="btn btn-primary"
                   title="Improve book cover accuracy using enhanced search"
-                  style={{ 
-                    backgroundColor: books.length === 0 ? '#ff6b6b' : '#4CAF50', 
-                    color: '#ffffff',
-                    border: '2px solid #333',
-                    fontWeight: '600',
-                    textShadow: '1px 1px 2px rgba(0,0,0,0.7)',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}
                 >
-                  {isRefreshingCovers ? '🔄 Refreshing...' : `🖼️ Refresh Covers (${books.length})`}
+                  {isRefreshingCovers ? '🔄 Refreshing...' : '🖼️ Refresh Covers'}
                 </button>
                 <button 
                   onClick={() => setShowImport(!showImport)}
