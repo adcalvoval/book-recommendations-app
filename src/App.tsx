@@ -221,7 +221,7 @@ Wishlist
                 <button
                   onClick={handleRefreshCovers}
                   disabled={isRefreshingCovers || books.length === 0}
-                  className="btn btn-primary"
+                  className="btn refresh-covers-btn"
                   title="Improve book cover accuracy using enhanced search"
                 >
                   {isRefreshingCovers ? '🔄 Refreshing...' : '🖼️ Refresh Covers'}
