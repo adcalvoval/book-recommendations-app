@@ -430,12 +430,29 @@ const levenshteinDistance = (str1: string, str2: string): number => {
 // Validate if a URL points to a valid image
 const isValidImageUrl = async (url: string): Promise<boolean> => {
   try {
+    // Skip validation for known good domains that might have CORS issues
+    const corsProblematicDomains = [
+      'books.google.com',
+      'books.googleusercontent.com'
+    ];
+    
+    const urlObj = new URL(url);
+    if (corsProblematicDomains.some(domain => urlObj.hostname.includes(domain))) {
+      console.log(`⏭️ Skipping CORS validation for: ${urlObj.hostname}`);
+      return true; // Assume Google Books URLs are valid
+    }
+    
     const response = await fetch(url, { method: 'HEAD' });
     if (!response.ok) return false;
     
     const contentType = response.headers.get('content-type');
     return contentType ? contentType.startsWith('image/') : false;
-  } catch {
+  } catch (error) {
+    console.warn(`⚠️ Image validation failed for ${url}:`, error);
+    // If it's a CORS error but the URL looks like an image, assume it's valid
+    if (url.includes('books.google.com') || url.includes('covers.openlibrary.org')) {
+      return true;
+    }
     return false;
   }
 };
