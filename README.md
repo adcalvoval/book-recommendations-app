@@ -2,7 +2,7 @@
 
 A personalized book recommendation system that helps you discover new books based on your reading history and preferences.
 
-**Created by:** Adrian Calvo
+**Created by:** Adrian Calvo Valderrama
 
 ## Features
 
