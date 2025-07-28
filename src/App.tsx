@@ -126,10 +126,11 @@ function App() {
   // Refresh covers for all library books
   const handleRefreshCovers = async () => {
     console.log('🎯 Refresh covers button clicked!', { booksCount: books.length });
+    alert(`Button clicked! Found ${books.length} books in library`);
     
     if (books.length === 0) {
       console.log('❌ No books to refresh covers for');
-      alert('No books in library to refresh covers for');
+      alert('No books in library to refresh covers for. Add some books first!');
       return;
     }
     
@@ -204,11 +205,12 @@ Wishlist
               <div className="section-actions">
                 <button
                   onClick={handleRefreshCovers}
-                  disabled={isRefreshingCovers || books.length === 0}
+                  disabled={isRefreshingCovers}
                   className="btn btn-secondary"
                   title="Improve book cover accuracy using enhanced search"
+                  style={{ backgroundColor: books.length === 0 ? '#ff6b6b' : '#4CAF50', color: 'white' }}
                 >
-                  {isRefreshingCovers ? '🔄 Refreshing...' : '🖼️ Refresh Covers'}
+                  {isRefreshingCovers ? '🔄 Refreshing...' : `🖼️ Refresh Covers (${books.length})`}
                 </button>
                 <button 
                   onClick={() => setShowImport(!showImport)}
