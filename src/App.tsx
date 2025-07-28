@@ -223,7 +223,14 @@ Wishlist
                   disabled={isRefreshingCovers}
                   className="btn btn-secondary"
                   title="Improve book cover accuracy using enhanced search"
-                  style={{ backgroundColor: books.length === 0 ? '#ff6b6b' : '#4CAF50', color: 'white' }}
+                  style={{ 
+                    backgroundColor: books.length === 0 ? '#ff6b6b' : '#4CAF50', 
+                    color: '#ffffff',
+                    border: '2px solid #333',
+                    fontWeight: '600',
+                    textShadow: '1px 1px 2px rgba(0,0,0,0.7)',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}
                 >
                   {isRefreshingCovers ? '🔄 Refreshing...' : `🖼️ Refresh Covers (${books.length})`}
                 </button>
